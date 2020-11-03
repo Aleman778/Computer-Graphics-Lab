@@ -1,0 +1,41 @@
+PROJECT(d7045_lab)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.2)
+
+IF(CMAKE_COMPILER_IS_GNUCXX)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+ENDIF()
+IF(APPLE)
+	SET(CMAKE_CXX_FLAGS "-g -std=c++11 -stdlib=libc++")
+ENDIF()
+
+IF(MSVC)
+    SET(OPENGL_LIBS opengl32.lib)
+ELSEIF(APPLE)
+	add_definitions(-Wno-deprecated-declarations)
+	find_package(OpenGL REQUIRED)
+	SET(OPENGL_LIBS pthread ${OPENGL_LIBRARIES})
+ELSE()
+    SET(OPENGL_LIBS GL X11 Xxf86vm pthread Xrandr Xi Xinerama Xcursor)
+ENDIF()
+
+SET(LAB_ENV_ROOT ${CMAKE_CURRENT_DIR})
+
+if (MSVC)
+	SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/bin>)
+else()
+	SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+endif()
+
+SET_PROPERTY(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS GLEW_STATIC)
+ADD_SUBDIRECTORY(vendor)
+
+PROJECT(lab)
+FILE(GLOB lab_headers src/*.h)
+FILE(GLOB lab_sources src/*.cpp)
+
+SET(files_lab ${lab_headers} ${lab_sources})
+SOURCE_GROUP("lab" FILES ${files_lab})
+
+ADD_EXECUTABLE(lab ${files_lab})
+ADD_DEPENDENCIES(lab glew)
+TARGET_LINK_LIBRARIES(lab PUBLIC vendor glfw glew imgui glm_static ${OPENGL_LIBS})
