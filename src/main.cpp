@@ -1,12 +1,26 @@
 #define GLFW_INCLUDE_NONE
 #include <cstdio>
+#include <cstdint>
 #include <string>
+#include <vector>
+#include <glm.hpp>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include "imgui_impl_glfw_gl3.h"
 
-#include "koch_snowflake.cpp"
+typedef  int8_t   i8;
+typedef uint8_t   u8;
+typedef  int16_t  i16;
+typedef uint16_t  u16;
+typedef  int32_t  i32;
+typedef uint32_t  u32;
+typedef  int64_t  i64;
+typedef uint64_t  u64;
+typedef ptrdiff_t isize;
+typedef size_t    usize;
+typedef float     f32;
+typedef double    f64;
 
 void
 opengl_debug_callback(GLenum source,
@@ -16,35 +30,63 @@ opengl_debug_callback(GLenum source,
                       GLsizei length,
                       const GLchar* message,
                       const void* user_params) {
-    std::string msg("[OpenGL] ");
+    std::string header("[OpenGL] ");
     switch (severity) {
         case GL_DEBUG_SEVERITY_LOW: {
-            msg.append("<low severity> ");
+            header.append("<low severity> ");
         } break;
 
         case GL_DEBUG_SEVERITY_MEDIUM: {
-            msg.append("<medium severity> ");
+            header.append("<medium severity> ");
         } break;
 
         case GL_DEBUG_SEVERITY_HIGH: {
-            msg.append("<high severity> ");
+            header.append("<high severity> ");
         } break;
     }
-
-    msg.append(message);
 
     switch (type) {
         case GL_DEBUG_TYPE_ERROR:
         case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
-            printf("Error: %s\n", msg.c_str());
+            printf("%s Error: %s\n", header.c_str(), message);
             break;
 
         case GL_DEBUG_TYPE_PERFORMANCE:
-            printf("Performance issue: %s\n", msg.c_str());
+            printf("%s Performance issue: %s\n", header.c_str(), message);
             break;
-
         default: break;
     }
+}
+
+void
+opengl_log_shader_compilation(GLuint shader) {
+    GLint log_length;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetShaderInfoLog(shader, log_length, NULL, buf);
+        printf("[OpenGL] Shader compilation error: %s", buf);
+        delete[] buf;
+    }
+}
+
+void
+opengl_log_program_linking(GLuint program) {
+    GLint log_length;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetProgramInfoLog(program, log_length, NULL, buf);
+        printf("[OpenGL] Program link error: %s", buf);
+        delete[] buf;
+    }
+}
+
+#include "lab1/koch_snowflake.cpp"
+
+void
+window_size_callback(GLFWwindow* window, i32 width, i32 height) {
+    glViewport(0, 0, width, height);
 }
 
 int 
@@ -66,7 +108,7 @@ main() {
     glfwWindowHint(GLFW_SAMPLES, 8);
 
     // Creating the window
-    GLFWwindow* window = glfwCreateWindow(640, 480, "Hello World", 0, 0);
+    GLFWwindow* window = glfwCreateWindow(640, 640, "Hello World", 0, 0);
     glfwMakeContextCurrent(window);
     if (!window) {
         glfwTerminate();
@@ -91,6 +133,14 @@ main() {
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, &unused_ids, true);
     }
 
+    // Setup glfw callbacks
+    // glfwSetKeyCallback(window,         key_callback);
+    // glfwSetMouseButtonCallback(window, mouse_callback);
+    // glfwSetCursorPosCallback(window,   cursor_pos_callback);
+    // glfwSetCursorEnterCallback(window, enter_callback);
+    // glfwSetScrollCallback(window,      scroll_callback);
+    glfwSetWindowSizeCallback(window,  window_size_callback);
+
     // Setup ImGui
     ImGui::CreateContext();
     ImGui_ImplGlfwGL3_Init(window, false);
@@ -98,11 +148,13 @@ main() {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->AddFontFromFileTTF("../roboto.ttf", 16);
 
+    Koch_Snowflake_Scene scene = {};
+
     // Programs main loop
     while (!glfwWindowShouldClose(window)) {
         ImGui_ImplGlfwGL3_NewFrame();
 
-        update_and_render_scene();
+        update_and_render_scene(&scene);
 
         ImGui::Render();
 
