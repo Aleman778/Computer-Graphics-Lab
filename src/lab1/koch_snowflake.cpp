@@ -1,11 +1,10 @@
 
-
 /***************************************************************************
  * Lab assignment 1 - Alexander Mennborg
  * Koch Snowflake - https://en.wikipedia.org/wiki/Koch_snowflake
  ***************************************************************************/
 
-const int MAX_RECURSION_DEPTH = 7;
+const int max_recursion_depth = 7;
 
 const char* vert_shader_source =
     "#version 330\n"
@@ -18,55 +17,71 @@ const char* vert_shader_source =
 const char* frag_shader_source =
     "#version 330\n"
     "out vec4 frag_color;\n"
+    "uniform vec4 color;\n"
     "void main() {\n"
-    "    frag_color = vec4(1.0f, 0.0f, 0.0f, 1.0f);\n"
+    "    frag_color = color;\n"
     "}\n";
 
 struct Koch_Snowflake_Scene {
-    GLuint  vertex_buffers[MAX_RECURSION_DEPTH];
-    GLsizei vertex_count[MAX_RECURSION_DEPTH];
+    // Fill vertex buffer info
+    GLuint  fill_vbo[max_recursion_depth];
+    GLsizei fill_count[max_recursion_depth];
+
+    // Outline vertex buffer info
+    GLuint  outline_vbo[max_recursion_depth];
+    GLsizei outline_count[max_recursion_depth];
+    
+    // Shader data
     GLuint  shader;
     GLint   transform_uniform;
+    GLint   color_uniform;
 
+    // Transformation data
     float translation;
     float rotation;
     float scale;
 
+    // Render state
     int recursion_depth;
     bool enable_translation;
     bool enable_rotation;
     bool enable_scale;
+    bool enable_wireframe;
     bool show_gui;
+    
     bool is_initialized;
 };
 
 void
 gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
-                           std::vector<glm::vec2>* in_vertices,
+                           std::vector<glm::vec2> curr_outline,
+                           std::vector<glm::vec2> fill,
                            int depth) {
     assert(depth > 0);
-    if (depth > 7) {
+    if (depth > max_recursion_depth) {
         return;
     }
 
-    size_t size = in_vertices ? in_vertices->size()*4 : 3;
-    std::vector<glm::vec2> vertices(size);
+    size_t next_outline_size = curr_outline.empty() ? 3 : curr_outline.size()*4;
+    std::vector<glm::vec2> next_outline(next_outline_size);
     if (depth == 1) {
         glm::vec2 p1( 0.0f,  0.85f);
         glm::vec2 p2( 0.7f, -0.35f);
         glm::vec2 p3(-0.7f, -0.35f);
-        vertices[0] = p1;
-        vertices[1] = p2;
-        vertices[2] = p3;
+        next_outline[0] = p1;
+        next_outline[1] = p2;
+        next_outline[2] = p3;
+        fill = next_outline;
     } else {
-        assert(in_vertices->size() >= 3 && "in_vertices must have atleast three vertices");
-        for (int i = 0; i < in_vertices->size(); i++) {
-            glm::vec2 p0 = (*in_vertices)[i];
+        assert(curr_outline.size() >= 3);
+        
+        for (int i = 0; i < curr_outline.size(); i++) {
+            glm::vec2 p0 = curr_outline[i];
             glm::vec2 p1;
-            if (i < in_vertices->size() - 1) {
-                p1 = (*in_vertices)[i + 1];
+            if (i < curr_outline.size() - 1) {
+                p1 = curr_outline[i + 1];
             } else {
-                p1 = (*in_vertices)[0];
+                p1 = curr_outline[0];
             }
             glm::vec2 d = p1 - p0;
             glm::vec2 n(-d.y, d.x);
@@ -74,30 +89,44 @@ gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
             glm::vec2 q0 = p0 + d/3.0f;
             glm::vec2 m  = p0 + d/2.0f;
             glm::vec2 q1 = q0 + d/3.0f;
-            glm::vec2 a = m + n*glm::length(d)*glm::sqrt(3.0f)/6.0f; // height of equilateral triangle
+            glm::vec2 a = m + n*glm::length(d)*glm::sqrt(3.0f)/6.0f;
             
-            vertices[i*4]     = p0;
-            vertices[i*4 + 1] = q0;
-            vertices[i*4 + 2] = a;
-            vertices[i*4 + 3] = q1;
+            next_outline[i*4]     = p0;
+            next_outline[i*4 + 1] = q0;
+            next_outline[i*4 + 2] = a;
+            next_outline[i*4 + 3] = q1;
+            
+            fill.push_back(q0);
+            fill.push_back(q1);
+            fill.push_back(a);
         }
     }
 
-    glGenBuffers(1, &scene->vertex_buffers[depth - 1]);
-    glBindBuffer(GL_ARRAY_BUFFER, scene->vertex_buffers[depth - 1]);
+    glBindBuffer(GL_ARRAY_BUFFER, scene->outline_vbo[depth - 1]);
     glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(glm::vec2)*vertices.size(),
-                 &vertices[0].x,
+                 sizeof(glm::vec2)*next_outline.size(),
+                 &next_outline[0].x,
                  GL_STATIC_DRAW);
-    scene->vertex_count[depth - 1] = (GLsizei) vertices.size();
-    gen_koch_showflake_buffers(scene, &vertices, depth + 1);
-    return;
+    scene->outline_count[depth - 1] = (GLsizei) next_outline.size();
+
+    glGenBuffers(1, &scene->fill_vbo[depth - 1]);
+    glBindBuffer(GL_ARRAY_BUFFER, scene->fill_vbo[depth - 1]);
+    glBufferData(GL_ARRAY_BUFFER,
+                 sizeof(glm::vec2)*fill.size(),
+                 &fill[0].x,
+                 GL_STATIC_DRAW);
+    scene->fill_count[depth - 1] = (GLsizei) fill.size();
+
+    gen_koch_showflake_buffers(scene, next_outline, fill, depth + 1);
 }
 
 bool
 initialize_scene(Koch_Snowflake_Scene* scene) {
+    glGenBuffers(max_recursion_depth, scene->outline_vbo);
+    glGenBuffers(max_recursion_depth, scene->fill_vbo);
+
     // Setup vertex buffers for each snowflake
-    gen_koch_showflake_buffers(scene, NULL, 1);
+    gen_koch_showflake_buffers(scene, {}, {}, 1);
 
     // Setup vertex shader
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
@@ -154,6 +183,12 @@ initialize_scene(Koch_Snowflake_Scene* scene) {
         return false;
     }
 
+    scene->color_uniform = glGetUniformLocation(scene->shader, "color");
+    if (scene->color_uniform == -1) {
+        printf("[OpenGL] failed to get uniform location `color`");
+        return false;
+    }
+
     // Setup default settings
     scene->translation        = 0.0f;
     scene->rotation           = 0.0f;
@@ -206,29 +241,47 @@ update_and_render_scene(Koch_Snowflake_Scene* scene) {
     transform = glm::scale(transform, glm::vec2(scale, scale));
     transform = glm::rotate(transform, scene->rotation);
 
-
     // Render and clear background
     glClearColor(1.0f, 0.99f, 0.8f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // Render the koch snowflake
-    glBindBuffer(GL_ARRAY_BUFFER, scene->vertex_buffers[scene->recursion_depth - 1]);
+    // Rendering the koch snowflake
+    glBindBuffer(GL_ARRAY_BUFFER, scene->fill_vbo[scene->recursion_depth - 1]);
     glUseProgram(scene->shader);
     glUniformMatrix3fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(transform));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glLineWidth(2);
-    glDrawArrays(GL_LINE_LOOP, 0, scene->vertex_count[scene->recursion_depth - 1]);
+
+    // Draw fill
+    glUniform4f(scene->color_uniform, 1.0f, 0.0f, 0.0f, 0.0f);
+    glBindBuffer(GL_ARRAY_BUFFER, scene->fill_vbo[scene->recursion_depth - 1]);
+    if (scene->enable_wireframe) {
+        glLineWidth(3);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    } else {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+    glDrawArrays(GL_TRIANGLES, 0, scene->fill_count[scene->recursion_depth - 1]);
+
+    // Draw outline
+    glLineWidth(3);
+    glUniform4f(scene->color_uniform, 0.0f, 0.0f, 0.0f, 0.0f);
+    glBindBuffer(GL_ARRAY_BUFFER, scene->outline_vbo[scene->recursion_depth - 1]);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glDrawArrays(GL_LINE_LOOP, 0, scene->outline_count[scene->recursion_depth - 1]);
     glLineWidth(1);
 
     // Draw GUI
     ImGui::Begin("Koch Snowflake", &scene->show_gui, ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::Text("Recursion Depth");
-    ImGui::SliderInt("", &scene->recursion_depth, 1, MAX_RECURSION_DEPTH);
-    ImGui::Text("Vertex Count: %zd", scene->vertex_count[scene->recursion_depth - 1]);
-    ImGui::Checkbox("Enable translation: ", &scene->enable_translation);
-    ImGui::Checkbox("Enable rotation: ", &scene->enable_rotation);
-    ImGui::Checkbox("Enable scaling: ", &scene->enable_scale);
+    ImGui::SliderInt("", &scene->recursion_depth, 1, max_recursion_depth);
+    ImGui::Text("Fill Vertex Count: %zd", scene->fill_count[scene->recursion_depth - 1]);
+    ImGui::Text("Outline Vertex Count: %zd", scene->outline_count[scene->recursion_depth - 1]);
+    ImGui::Checkbox("Enable translation", &scene->enable_translation);
+    ImGui::Checkbox("Enable rotation", &scene->enable_rotation);
+    ImGui::Checkbox("Enable scaling", &scene->enable_scale);
+    ImGui::Checkbox("Wireframe mode", &scene->enable_wireframe);
     ImGui::End();
 }

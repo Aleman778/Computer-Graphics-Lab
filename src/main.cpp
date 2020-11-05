@@ -34,6 +34,8 @@ typedef double    f64;
 
 static bool is_running = true;
 
+#include "lab1/koch_snowflake.cpp"
+
 void
 opengl_debug_callback(GLenum source,
                       GLenum type,
@@ -70,8 +72,6 @@ opengl_debug_callback(GLenum source,
     }
 }
 
-#include "lab1/koch_snowflake.cpp"
-
 int 
 main() {
     if (!glfwInit()) {
@@ -93,7 +93,7 @@ main() {
     // Creating the window
     i32 width = 1280;
     i32 height= 720;
-    GLFWwindow* window = glfwCreateWindow(width, height, "Hello World", 0, 0);
+    GLFWwindow* window = glfwCreateWindow(width, height, "D7045E Lab", 0, 0);
     glfwMakeContextCurrent(window);
     if (!window) {
         glfwTerminate();
@@ -134,7 +134,7 @@ main() {
     ImGui_ImplGlfwGL3_Init(window, false);
     
     ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->AddFontFromFileTTF("../roboto.ttf", 16);
+    io.Fonts->AddFontFromFileTTF("../roboto.ttf", 20);
 
     Koch_Snowflake_Scene scene = {};
 
