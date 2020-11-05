@@ -1,4 +1,5 @@
 
+
 /***************************************************************************
  * Lab assignment 1 - Alexander Mennborg
  * Koch Snowflake - https://en.wikipedia.org/wiki/Koch_snowflake
@@ -9,8 +10,9 @@ const int MAX_RECURSION_DEPTH = 7;
 const char* vert_shader_source =
     "#version 330\n"
     "layout(location=0) in vec2 pos;\n"
+    "uniform mat3 transform;\n"
     "void main() {\n"
-    "    gl_Position = vec4(pos, 1.0f, 1.0f);\n"
+    "    gl_Position = vec4(transform*vec3(pos, 1.0f), 1.0f);\n"
     "}\n";
 
 const char* frag_shader_source =
@@ -24,29 +26,19 @@ struct Koch_Snowflake_Scene {
     GLuint  vertex_buffers[MAX_RECURSION_DEPTH];
     GLsizei vertex_count[MAX_RECURSION_DEPTH];
     GLuint  shader;
+    GLint   transform_uniform;
+
+    float translation;
+    float rotation;
+    float scale;
 
     int recursion_depth;
+    bool enable_translation;
+    bool enable_rotation;
+    bool enable_scale;
     bool show_gui;
     bool is_initialized;
 };
-
-/*
-  NOTE(alexander): point in triangle algorithm from:
-  https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
-*/
-bool
-point_in_triangle(glm::vec2 pt, glm::vec2 p1, glm::vec2 p2, glm::vec2 p3) {
-    auto sign = [](glm::vec2 p1, glm::vec2 p2, glm::vec2 p3) -> float {
-        return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
-    };
-
-    float d1 = sign(pt, p1, p2);
-    float d2 = sign(pt, p2, p3);
-    float d3 = sign(pt, p3, p1);
-    return !((d1 < 0) || (d2 < 0) || (d3 < 0) &&
-             (d1 > 0) || (d2 > 0) || (d3 > 0));
-}
-
 
 void
 gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
@@ -102,119 +94,7 @@ gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
     return;
 }
 
-
-// void
-// gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
-//                            std::vector<glm::vec2>* curr_triangles,
-//                            int depth) {
-//     assert(depth > 0);
-//     if (depth > 7) {
-//         return;
-//     }
-    
-//     auto gen_triangles = [](std::vector<glm::vec2>* next_triangles,
-//                             glm::vec2 p0,
-//                             glm::vec2 p1,
-//                             glm::vec2 b,
-//                             bool gen_extruding_triangle) {
-//         glm::vec2 q0 = p0 + (p1 - p0)/3.0f;
-//         glm::vec2 m  = p0 + (p1 - p0)/2.0f;
-//         glm::vec2 q1 = q0 + (p1 - p0)/3.0f;
-//         glm::vec2 a = m - glm::normalize(b - m)*(glm::length(p1 - p0)*(glm::sqrt(3.0f)/6.0f));
-
-
-//         next_triangles->push_back(q0);
-//         next_triangles->push_back(p0 + (b - p0)/3.0f);
-//         next_triangles->push_back(p0);
-        
-        
-//         next_triangles->push_back(p0 + (b - p0)/3.0f);
-//         next_triangles->push_back(q0);
-//         next_triangles->push_back(p0);
- 
-//         // Extruding triangle
-//         if (gen_extruding_triangle) {
-//             next_triangles->push_back(q1);
-//             next_triangles->push_back(a);
-//             next_triangles->push_back(q0);
-   
-
-//             next_triangles->push_back(a);
-//             next_triangles->push_back(q0);
-//             next_triangles->push_back(q1);
-//         }
-        
-//         next_triangles->push_back(p1);
-//         next_triangles->push_back(q1);
-//         next_triangles->push_back(p1 + (b - p1)/3.0f);
-//     };
-
-//     // NOTE(alexander): the actual koch snowflake fractal curve (line loop).
-//     std::vector<glm::vec2> koch_snowflake_vertices;
-
-//     // NOTE(alexander): helper triangles used to generate next recursive step.
-//     std::vector<glm::vec2> next_triangles;
-
-//     if (depth == 1) {
-//         glm::vec2 p1( 0.0f,  0.9f);
-//         glm::vec2 p2( 0.8f, -0.5f);
-//         glm::vec2 p3(-0.8f, -0.5f);
-//         koch_snowflake_vertices.push_back(p1);
-//         koch_snowflake_vertices.push_back(p2);
-//         koch_snowflake_vertices.push_back(p3);
-
-//         koch_snowflake_vertices.push_back(p2);
-//         koch_snowflake_vertices.push_back(p3);
-//         koch_snowflake_vertices.push_back(p1);
-        
-//         koch_snowflake_vertices.push_back(p3);
-//         koch_snowflake_vertices.push_back(p1);
-//         koch_snowflake_vertices.push_back(p2);
-//         next_triangles = koch_snowflake_vertices;
-//     } else {
-//         assert(curr_triangles->size() >= 3 && "curr_triangles must have atleast three koch_snowflake_vertices");
-//         for (int i = 0; i < curr_triangles->size(); i += 3) {
-//             glm::vec2 p0 = (*curr_triangles)[i];
-//             glm::vec2 p1 = (*curr_triangles)[i + 1];
-//             glm::vec2 b = (*curr_triangles)[i + 2];
-//             // next_triangles.push_back(p0);
-//             // next_triangles.push_back(p1);
-//             // next_triangles.push_back(p2);
-//             bool pointing_upward = p0.y > p1.y;
-//             pointing_upward = true;
-//             // if (depth < 4 || pointing_upward) gen_triangles(&next_triangles, p0, p1, p2, true);
-//             // gen_triangles(&next_triangles, p1, p2, p0, depth == 2 && depth < 4);
-//             // if (depth < 4 || pointing_upward) gen_triangles(&next_triangles, p2, p0, p1, true);
-//             gen_triangles(&next_triangles, p0, p1, b, true);
-            
-//             glm::vec2 q0 = p0 + (p1 - p0)/3.0f;
-//             glm::vec2 m  = p0 + (p1 - p0)/2.0f;
-//             glm::vec2 q1 = q0 + (p1 - p0)/3.0f;
-//             glm::vec2 a = m - (b - m)*glm::sqrt(3.0f)/6.0f; // height of equilateral triangle
-            
-//             koch_snowflake_vertices.push_back(p0);
-//             koch_snowflake_vertices.push_back(q0);
-//             koch_snowflake_vertices.push_back(a);
-//             koch_snowflake_vertices.push_back(q1);
-//         }
-//     }
-
-//     // FIXME(alexander): remove this just to test the next triangles!
-//     // koch_snowflake_vertices = next_triangles;
-
-//     // Generate buffers for the koch snowflake 
-//     glGenBuffers(1, &scene->vertex_buffers[depth - 1]);
-//     glBindBuffer(GL_ARRAY_BUFFER, scene->vertex_buffers[depth - 1]);
-//     glBufferData(GL_ARRAY_BUFFER,
-//                  sizeof(glm::vec2)*koch_snowflake_vertices.size(),
-//                  &koch_snowflake_vertices[0].x,
-//                  GL_STATIC_DRAW);
-//     scene->vertex_count[depth - 1] = (GLsizei) koch_snowflake_vertices.size();
-//     gen_koch_showflake_buffers(scene, &next_triangles, depth + 1);
-//     return;
-// }
-
-void
+bool
 initialize_scene(Koch_Snowflake_Scene* scene) {
     // Setup vertex buffers for each snowflake
     gen_koch_showflake_buffers(scene, NULL, 1);
@@ -224,32 +104,108 @@ initialize_scene(Koch_Snowflake_Scene* scene) {
     GLint length = (GLint) std::strlen(vert_shader_source);
     glShaderSource(vs, 1, &vert_shader_source, &length);
     glCompileShader(vs);
-    opengl_log_shader_compilation(vs);
+    GLint log_length;
+    glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetShaderInfoLog(vs, log_length, NULL, buf);
+        printf("[OpenGL] Vertex shader compilation error: %s", buf);
+        delete[] buf;
+        return false;
+    }
+    
 
     // Setup fragment shader
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
     length = (GLint) std::strlen(frag_shader_source);
     glShaderSource(fs, 1, &frag_shader_source, &length);
     glCompileShader(fs);
-    opengl_log_shader_compilation(fs);
+    glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetShaderInfoLog(fs, log_length, NULL, buf);
+        printf("[OpenGL] Fragment shader compilation error: %s", buf);
+        delete[] buf;
+        return false;
+    }
 
     // Create shader program
     scene->shader = glCreateProgram();
     glAttachShader(scene->shader, vs);
     glAttachShader(scene->shader, fs);
     glLinkProgram(scene->shader);
-    opengl_log_program_linking(scene->shader);
+    glGetProgramiv(scene->shader, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetProgramInfoLog(scene->shader, log_length, NULL, buf);
+        printf("[OpenGL] Program link error: %s", buf);
+        delete[] buf;
+        return false;
+    }
 
-    scene->recursion_depth = 1;
-    scene->show_gui = false;
-    scene->is_initialized = true;
+    // Delete vertex and fragment shaders, no longer needed
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    // Setup shader uniform location
+    scene->transform_uniform = glGetUniformLocation(scene->shader, "transform");
+    if (scene->transform_uniform == -1) {
+        printf("[OpenGL] failed to get uniform location `transform`");
+        return false;
+    }
+
+    // Setup default settings
+    scene->translation        = 0.0f;
+    scene->rotation           = 0.0f;
+    scene->scale              = 0.0f;
+    scene->recursion_depth    = 1;
+    scene->show_gui           = false;
+    scene->enable_translation = false;
+    scene->enable_rotation    = false;
+    scene->enable_scale       = false;
+    scene->is_initialized     = true;
+
+    return true;
+}
+
+void
+window_size_callback(GLFWwindow* win, i32 width, i32 height) {
+    i32 size = width < height ? width : height;
+    i32 x = width/2 - size/2;
+    i32 y = height/2 - size/2;
+    glViewport(x, y, size, size);
 }
 
 void
 update_and_render_scene(Koch_Snowflake_Scene* scene) {
     if (!scene->is_initialized) {
-        initialize_scene(scene);
+        if (!initialize_scene(scene)) {
+            is_running = false;
+            return;
+        }
     }
+
+    float scale = cos(scene->scale) * 0.4f + 0.6f;
+    if (scene->enable_scale) {
+        scene->scale += 0.02f;
+    }
+
+    if (scene->enable_rotation) {
+        scene->rotation += 0.02f;
+    }
+
+    glm::vec2 pos(0.0f, 0.0f);
+    if (scene->enable_translation) {
+        pos.x = 0.3f*cos(scene->translation);
+        pos.y = 0.3f*sin(scene->translation);
+        scene->translation += 0.02f;
+    }
+
+    glm::mat3 transform(1.0f);
+    transform = glm::translate(transform, pos);
+    transform = glm::scale(transform, glm::vec2(scale, scale));
+    transform = glm::rotate(transform, scene->rotation);
+
 
     // Render and clear background
     glClearColor(1.0f, 0.99f, 0.8f, 1.0f);
@@ -258,6 +214,7 @@ update_and_render_scene(Koch_Snowflake_Scene* scene) {
     // Render the koch snowflake
     glBindBuffer(GL_ARRAY_BUFFER, scene->vertex_buffers[scene->recursion_depth - 1]);
     glUseProgram(scene->shader);
+    glUniformMatrix3fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(transform));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glLineWidth(2);
@@ -270,5 +227,8 @@ update_and_render_scene(Koch_Snowflake_Scene* scene) {
     ImGui::Text("Recursion Depth");
     ImGui::SliderInt("", &scene->recursion_depth, 1, MAX_RECURSION_DEPTH);
     ImGui::Text("Vertex Count: %zd", scene->vertex_count[scene->recursion_depth - 1]);
+    ImGui::Checkbox("Enable translation: ", &scene->enable_translation);
+    ImGui::Checkbox("Enable rotation: ", &scene->enable_rotation);
+    ImGui::Checkbox("Enable scaling: ", &scene->enable_scale);
     ImGui::End();
 }

@@ -1,11 +1,21 @@
-#define GLFW_INCLUDE_NONE
 #include <cstdio>
 #include <cstdint>
+#include <ctime>
+#include <cmath>
+
 #include <string>
 #include <vector>
+
 #include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
+#include <gtx/matrix_transform_2d.hpp>
+#include <gtc/type_ptr.hpp>
+
 #include <GL/glew.h>
+
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+
 #include <imgui.h>
 #include "imgui_impl_glfw_gl3.h"
 
@@ -21,6 +31,8 @@ typedef ptrdiff_t isize;
 typedef size_t    usize;
 typedef float     f32;
 typedef double    f64;
+
+static bool is_running = true;
 
 void
 opengl_debug_callback(GLenum source,
@@ -58,39 +70,7 @@ opengl_debug_callback(GLenum source,
     }
 }
 
-void
-opengl_log_shader_compilation(GLuint shader) {
-    GLint log_length;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetShaderInfoLog(shader, log_length, NULL, buf);
-        printf("[OpenGL] Shader compilation error: %s", buf);
-        delete[] buf;
-    }
-}
-
-void
-opengl_log_program_linking(GLuint program) {
-    GLint log_length;
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetProgramInfoLog(program, log_length, NULL, buf);
-        printf("[OpenGL] Program link error: %s", buf);
-        delete[] buf;
-    }
-}
-
 #include "lab1/koch_snowflake.cpp"
-
-void
-window_size_callback(GLFWwindow* window, i32 width, i32 height) {
-    i32 size = width < height ? width : height;
-    i32 x = width/2 - size/2;
-    i32 y = height/2 - size/2;
-    glViewport(x, y, size, size);
-}
 
 int 
 main() {
@@ -111,7 +91,9 @@ main() {
     glfwWindowHint(GLFW_SAMPLES, 8);
 
     // Creating the window
-    GLFWwindow* window = glfwCreateWindow(640, 640, "Hello World", 0, 0);
+    i32 width = 1280;
+    i32 height= 720;
+    GLFWwindow* window = glfwCreateWindow(width, height, "Hello World", 0, 0);
     glfwMakeContextCurrent(window);
     if (!window) {
         glfwTerminate();
@@ -144,6 +126,9 @@ main() {
     // glfwSetScrollCallback(window,      scroll_callback);
     glfwSetWindowSizeCallback(window,  window_size_callback);
 
+    // Notify the scene what the width and height is
+    window_size_callback(window, width, height);
+
     // Setup ImGui
     ImGui::CreateContext();
     ImGui_ImplGlfwGL3_Init(window, false);
@@ -154,7 +139,7 @@ main() {
     Koch_Snowflake_Scene scene = {};
 
     // Programs main loop
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window) && is_running) {
         ImGui_ImplGlfwGL3_NewFrame();
 
         update_and_render_scene(&scene);
