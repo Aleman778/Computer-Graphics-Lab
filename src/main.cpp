@@ -86,7 +86,10 @@ opengl_log_program_linking(GLuint program) {
 
 void
 window_size_callback(GLFWwindow* window, i32 width, i32 height) {
-    glViewport(0, 0, width, height);
+    i32 size = width < height ? width : height;
+    i32 x = width/2 - size/2;
+    i32 y = height/2 - size/2;
+    glViewport(x, y, size, size);
 }
 
 int 

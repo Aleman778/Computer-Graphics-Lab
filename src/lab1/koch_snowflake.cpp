@@ -30,6 +30,24 @@ struct Koch_Snowflake_Scene {
     bool is_initialized;
 };
 
+/*
+  NOTE(alexander): point in triangle algorithm from:
+  https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
+*/
+bool
+point_in_triangle(glm::vec2 pt, glm::vec2 p1, glm::vec2 p2, glm::vec2 p3) {
+    auto sign = [](glm::vec2 p1, glm::vec2 p2, glm::vec2 p3) -> float {
+        return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+    };
+
+    float d1 = sign(pt, p1, p2);
+    float d2 = sign(pt, p2, p3);
+    float d3 = sign(pt, p3, p1);
+    return !((d1 < 0) || (d2 < 0) || (d3 < 0) &&
+             (d1 > 0) || (d2 > 0) || (d3 > 0));
+}
+
+
 void
 gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
                            std::vector<glm::vec2>* in_vertices,
@@ -42,9 +60,9 @@ gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
     size_t size = in_vertices ? in_vertices->size()*4 : 3;
     std::vector<glm::vec2> vertices(size);
     if (depth == 1) {
-        glm::vec2 p1( 0.0f,  0.9f);
-        glm::vec2 p2( 0.9f, -0.5f);
-        glm::vec2 p3(-0.9f, -0.5f);
+        glm::vec2 p1( 0.0f,  0.85f);
+        glm::vec2 p2( 0.7f, -0.35f);
+        glm::vec2 p3(-0.7f, -0.35f);
         vertices[0] = p1;
         vertices[1] = p2;
         vertices[2] = p3;
@@ -58,24 +76,13 @@ gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
             } else {
                 p1 = (*in_vertices)[0];
             }
-            glm::vec2 b;
-            if (i > 0) {
-                if (i % 2 == 0) {
-                    b = (*in_vertices)[(i - 1) % in_vertices->size()];
-                } else {
-                    if (i < in_vertices->size() - 2) {
-                        b = (*in_vertices)[i + 2];
-                    } else {
-                        b = (*in_vertices)[1];
-                    }
-                }
-            } else {
-                b = (*in_vertices)[in_vertices->size() - 1];
-            }
-            glm::vec2 q0 = p0 + (p1 - p0)/3.0f;
-            glm::vec2 m  = p0 + (p1 - p0)/2.0f;
-            glm::vec2 q1 = q0 + (p1 - p0)/3.0f;
-            glm::vec2 a = m - (b - m)*glm::sqrt(3.0f)/6.0f; // height of equilateral triangle
+            glm::vec2 d = p1 - p0;
+            glm::vec2 n(-d.y, d.x);
+            n = glm::normalize(n);
+            glm::vec2 q0 = p0 + d/3.0f;
+            glm::vec2 m  = p0 + d/2.0f;
+            glm::vec2 q1 = q0 + d/3.0f;
+            glm::vec2 a = m + n*glm::length(d)*glm::sqrt(3.0f)/6.0f; // height of equilateral triangle
             
             vertices[i*4]     = p0;
             vertices[i*4 + 1] = q0;
@@ -94,6 +101,118 @@ gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
     gen_koch_showflake_buffers(scene, &vertices, depth + 1);
     return;
 }
+
+
+// void
+// gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
+//                            std::vector<glm::vec2>* curr_triangles,
+//                            int depth) {
+//     assert(depth > 0);
+//     if (depth > 7) {
+//         return;
+//     }
+    
+//     auto gen_triangles = [](std::vector<glm::vec2>* next_triangles,
+//                             glm::vec2 p0,
+//                             glm::vec2 p1,
+//                             glm::vec2 b,
+//                             bool gen_extruding_triangle) {
+//         glm::vec2 q0 = p0 + (p1 - p0)/3.0f;
+//         glm::vec2 m  = p0 + (p1 - p0)/2.0f;
+//         glm::vec2 q1 = q0 + (p1 - p0)/3.0f;
+//         glm::vec2 a = m - glm::normalize(b - m)*(glm::length(p1 - p0)*(glm::sqrt(3.0f)/6.0f));
+
+
+//         next_triangles->push_back(q0);
+//         next_triangles->push_back(p0 + (b - p0)/3.0f);
+//         next_triangles->push_back(p0);
+        
+        
+//         next_triangles->push_back(p0 + (b - p0)/3.0f);
+//         next_triangles->push_back(q0);
+//         next_triangles->push_back(p0);
+ 
+//         // Extruding triangle
+//         if (gen_extruding_triangle) {
+//             next_triangles->push_back(q1);
+//             next_triangles->push_back(a);
+//             next_triangles->push_back(q0);
+   
+
+//             next_triangles->push_back(a);
+//             next_triangles->push_back(q0);
+//             next_triangles->push_back(q1);
+//         }
+        
+//         next_triangles->push_back(p1);
+//         next_triangles->push_back(q1);
+//         next_triangles->push_back(p1 + (b - p1)/3.0f);
+//     };
+
+//     // NOTE(alexander): the actual koch snowflake fractal curve (line loop).
+//     std::vector<glm::vec2> koch_snowflake_vertices;
+
+//     // NOTE(alexander): helper triangles used to generate next recursive step.
+//     std::vector<glm::vec2> next_triangles;
+
+//     if (depth == 1) {
+//         glm::vec2 p1( 0.0f,  0.9f);
+//         glm::vec2 p2( 0.8f, -0.5f);
+//         glm::vec2 p3(-0.8f, -0.5f);
+//         koch_snowflake_vertices.push_back(p1);
+//         koch_snowflake_vertices.push_back(p2);
+//         koch_snowflake_vertices.push_back(p3);
+
+//         koch_snowflake_vertices.push_back(p2);
+//         koch_snowflake_vertices.push_back(p3);
+//         koch_snowflake_vertices.push_back(p1);
+        
+//         koch_snowflake_vertices.push_back(p3);
+//         koch_snowflake_vertices.push_back(p1);
+//         koch_snowflake_vertices.push_back(p2);
+//         next_triangles = koch_snowflake_vertices;
+//     } else {
+//         assert(curr_triangles->size() >= 3 && "curr_triangles must have atleast three koch_snowflake_vertices");
+//         for (int i = 0; i < curr_triangles->size(); i += 3) {
+//             glm::vec2 p0 = (*curr_triangles)[i];
+//             glm::vec2 p1 = (*curr_triangles)[i + 1];
+//             glm::vec2 b = (*curr_triangles)[i + 2];
+//             // next_triangles.push_back(p0);
+//             // next_triangles.push_back(p1);
+//             // next_triangles.push_back(p2);
+//             bool pointing_upward = p0.y > p1.y;
+//             pointing_upward = true;
+//             // if (depth < 4 || pointing_upward) gen_triangles(&next_triangles, p0, p1, p2, true);
+//             // gen_triangles(&next_triangles, p1, p2, p0, depth == 2 && depth < 4);
+//             // if (depth < 4 || pointing_upward) gen_triangles(&next_triangles, p2, p0, p1, true);
+//             gen_triangles(&next_triangles, p0, p1, b, true);
+            
+//             glm::vec2 q0 = p0 + (p1 - p0)/3.0f;
+//             glm::vec2 m  = p0 + (p1 - p0)/2.0f;
+//             glm::vec2 q1 = q0 + (p1 - p0)/3.0f;
+//             glm::vec2 a = m - (b - m)*glm::sqrt(3.0f)/6.0f; // height of equilateral triangle
+            
+//             koch_snowflake_vertices.push_back(p0);
+//             koch_snowflake_vertices.push_back(q0);
+//             koch_snowflake_vertices.push_back(a);
+//             koch_snowflake_vertices.push_back(q1);
+//         }
+//     }
+
+//     // FIXME(alexander): remove this just to test the next triangles!
+//     // koch_snowflake_vertices = next_triangles;
+
+//     // Generate buffers for the koch snowflake 
+//     glGenBuffers(1, &scene->vertex_buffers[depth - 1]);
+//     glBindBuffer(GL_ARRAY_BUFFER, scene->vertex_buffers[depth - 1]);
+//     glBufferData(GL_ARRAY_BUFFER,
+//                  sizeof(glm::vec2)*koch_snowflake_vertices.size(),
+//                  &koch_snowflake_vertices[0].x,
+//                  GL_STATIC_DRAW);
+//     scene->vertex_count[depth - 1] = (GLsizei) koch_snowflake_vertices.size();
+//     gen_koch_showflake_buffers(scene, &next_triangles, depth + 1);
+//     return;
+// }
 
 void
 initialize_scene(Koch_Snowflake_Scene* scene) {
@@ -150,5 +269,6 @@ update_and_render_scene(Koch_Snowflake_Scene* scene) {
 
     ImGui::Text("Recursion Depth");
     ImGui::SliderInt("", &scene->recursion_depth, 1, MAX_RECURSION_DEPTH);
+    ImGui::Text("Vertex Count: %zd", scene->vertex_count[scene->recursion_depth - 1]);
     ImGui::End();
 }
