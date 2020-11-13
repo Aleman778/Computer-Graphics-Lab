@@ -128,53 +128,8 @@ initialize_scene(Koch_Snowflake_Scene* scene) {
     // Setup vertex buffers for each snowflake
     gen_koch_showflake_buffers(scene, {}, {}, 1);
 
-    // Setup vertex shader
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    GLint length = (GLint) std::strlen(vert_shader_source);
-    glShaderSource(vs, 1, &vert_shader_source, &length);
-    glCompileShader(vs);
-    GLint log_length;
-    glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetShaderInfoLog(vs, log_length, NULL, buf);
-        printf("[OpenGL] Vertex shader compilation error: %s", buf);
-        delete[] buf;
-        return false;
-    }
-    
-
-    // Setup fragment shader
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    length = (GLint) std::strlen(frag_shader_source);
-    glShaderSource(fs, 1, &frag_shader_source, &length);
-    glCompileShader(fs);
-    glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetShaderInfoLog(fs, log_length, NULL, buf);
-        printf("[OpenGL] Fragment shader compilation error: %s", buf);
-        delete[] buf;
-        return false;
-    }
-
-    // Create shader program
-    scene->shader = glCreateProgram();
-    glAttachShader(scene->shader, vs);
-    glAttachShader(scene->shader, fs);
-    glLinkProgram(scene->shader);
-    glGetProgramiv(scene->shader, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetProgramInfoLog(scene->shader, log_length, NULL, buf);
-        printf("[OpenGL] Program link error: %s", buf);
-        delete[] buf;
-        return false;
-    }
-
-    // Delete vertex and fragment shaders, no longer needed
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    // Load shader from sources
+    scene->shader = load_glsl_shader_from_sources(vert_shader_source, frag_shader_source);
 
     // Setup shader uniform location
     scene->transform_uniform = glGetUniformLocation(scene->shader, "transform");
@@ -204,7 +159,7 @@ initialize_scene(Koch_Snowflake_Scene* scene) {
 }
 
 void
-window_size_callback(GLFWwindow* win, i32 width, i32 height) {
+scene_window_size_callback(Koch_Snowflake_Scene* scene, i32 width, i32 height) {
     i32 size = width < height ? width : height;
     i32 x = width/2 - size/2;
     i32 y = height/2 - size/2;
@@ -246,15 +201,14 @@ update_and_render_scene(Koch_Snowflake_Scene* scene) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     // Rendering the koch snowflake
-    glBindBuffer(GL_ARRAY_BUFFER, scene->fill_vbo[scene->recursion_depth - 1]);
     glUseProgram(scene->shader);
+    glBindBuffer(GL_ARRAY_BUFFER, scene->fill_vbo[scene->recursion_depth - 1]);
     glUniformMatrix3fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(transform));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
     // Draw fill
     glUniform4f(scene->color_uniform, 1.0f, 0.0f, 0.0f, 0.0f);
-    glBindBuffer(GL_ARRAY_BUFFER, scene->fill_vbo[scene->recursion_depth - 1]);
     if (scene->enable_wireframe) {
         glLineWidth(3);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);

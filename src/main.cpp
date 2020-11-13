@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+#include <random>
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -34,7 +35,60 @@ typedef double    f64;
 
 static bool is_running = true;
 
-#include "lab1/koch_snowflake.cpp"
+GLuint
+load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_shader) {
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+    GLint length = (GLint) std::strlen(vertex_shader);
+    glShaderSource(vs, 1, &vertex_shader, &length);
+    glCompileShader(vs);
+    GLint log_length;
+    glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetShaderInfoLog(vs, log_length, NULL, buf);
+        printf("[OpenGL] Vertex shader compilation error: %s", buf);
+        delete[] buf;
+        return false;
+    }
+
+    // Setup fragment shader
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+    length = (GLint) std::strlen(fragment_shader);
+    glShaderSource(fs, 1, &fragment_shader, &length);
+    glCompileShader(fs);
+    glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetShaderInfoLog(fs, log_length, NULL, buf);
+        printf("[OpenGL] Fragment shader compilation error: %s", buf);
+        delete[] buf;
+        return false;
+    }
+
+    // Create shader program
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length > 0) {
+        GLchar* buf = new GLchar[log_length];
+        glGetProgramInfoLog(program, log_length, NULL, buf);
+        printf("[OpenGL] Program link error: %s", buf);
+        delete[] buf;
+        return false;
+    }
+
+    // Delete vertex and fragment shaders, no longer needed
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    return program;
+}
+
+
+// #include "koch_snowflake.cpp"
+#include "triangulation.cpp"
 
 void
 opengl_debug_callback(GLenum source,
@@ -71,6 +125,12 @@ opengl_debug_callback(GLenum source,
         default: break;
     }
 }
+
+void window_size_callback(GLFWwindow* window, i32 width, i32 height) {
+    void* scene = glfwGetWindowUserPointer(window);
+    if (scene) scene_window_size_callback(scene, width, height);
+}
+
 
 int 
 main() {
@@ -126,9 +186,6 @@ main() {
     // glfwSetScrollCallback(window,      scroll_callback);
     glfwSetWindowSizeCallback(window,  window_size_callback);
 
-    // Notify the scene what the width and height is
-    window_size_callback(window, width, height);
-
     // Setup ImGui
     ImGui::CreateContext();
     ImGui_ImplGlfwGL3_Init(window, false);
@@ -136,7 +193,13 @@ main() {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->AddFontFromFileTTF("../roboto.ttf", 20);
 
-    Koch_Snowflake_Scene scene = {};
+    // Koch_Snowflake_Scene scene = {};
+    Triangulation_Scene scene = {};
+
+    glfwSetWindowUserPointer(window, &scene);
+        
+    // Notify the scene what the width and height is
+    scene_window_size_callback(&scene, width, height);
 
     // Programs main loop
     while (!glfwWindowShouldClose(window) && is_running) {
