@@ -20,6 +20,7 @@
 #include <imgui.h>
 #include "imgui_impl_glfw_gl3.h"
 
+typedef unsigned int uint;
 typedef  int8_t   i8;
 typedef uint8_t   u8;
 typedef  int16_t  i16;
@@ -85,7 +86,6 @@ load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_sh
 
     return program;
 }
-
 
 // #include "koch_snowflake.cpp"
 #include "triangulation.cpp"

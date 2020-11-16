@@ -16,26 +16,22 @@ const char* frag_shader_source =
     "}\n";
 
 struct Triangulation_Scene {
-    // Original points buffer info
-    GLuint  points_vbo;
+    // Main vertex buffer info containing all the points
+    GLuint points_vao;
     GLsizei points_count;
     
     // Convex hull buffer info
-    GLuint  convex_hull_vbo;
+    GLuint  convex_hull_vao;
     GLsizei convex_hull_count;
 
-    // Convex hull buffer info
-    GLuint  fan_triangulation_vbo;
-    GLsizei fan_triangulation_count;
-
     // Resulted triangulated buffer info
-    GLuint vbo;
-    GLuint count;
+    GLuint triangulated_vao;
+    GLsizei triangulated_count;
 
     // Shader data
-    GLuint  shader;
-    GLint   color_uniform;
-    GLint   transform_uniform;
+    GLuint shader;
+    GLint  color_uniform;
+    GLint  transform_uniform;
 
     
     glm::mat4 ortho_projection;
@@ -43,9 +39,21 @@ struct Triangulation_Scene {
     bool is_initialized;
 };
 
+struct Triangle {
+    glm::vec2* vertices[3];
+    glm::vec4 color;
+    Triangle* neighbors[3];
+};
+
+struct Node {
+    glm::vec2 ray;
+    Triangle* triangle; // for non-leaf nodes this is NULL.
+    Node* children[3]; // for binary split nodes[2] is NULL.
+};
+
 struct Triangulation {
     std::vector<glm::vec2> vertices;
-    std::vector<int> triangles; // index into vertices (first vertex in a neighboring triangle)
+    Node root;
 };
 
 void
@@ -54,10 +62,15 @@ scene_window_size_callback(void* scene, i32 width, i32 height) {
     glViewport(0, 0, width, height);
 }
 
+inline float
+triangle_area(const glm::vec2& a, const glm::vec2& b, const glm::vec2& c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
 // NOTE(alexander): andrew's algorithm prerequsite is that input must be sorted with increasing x value
 std::vector<glm::vec2>
-compute_convex_hull(const std::vector<glm::vec2>& input) {
-    auto compute_half_convex_hull = [input](bool upper) -> std::vector<glm::vec2> {
+build_convex_hull(const std::vector<glm::vec2>& input) {
+    auto compute_half_convex_hull = [input](bool lower) -> std::vector<glm::vec2> {
         std::vector<glm::vec2> result;
         for (int i = 0; i < input.size(); i++) {
             glm::vec2 q = input[i]; // query point
@@ -65,14 +78,11 @@ compute_convex_hull(const std::vector<glm::vec2>& input) {
                 glm::vec2 a = result[result.size() - 2];
                 glm::vec2 b = result[result.size() - 1];
 
-                // Compute the determinant
-                glm::vec2 ab = a - b;
-                glm::vec2 qa = q - a;
-                float det = ab.x * qa.y - qa.x * ab.y;
-                if (upper) det *= -1.0;
+                float area = triangle_area(a, b, q);
+                if (lower) area *= -1.0; // NOTE(alexander): upper hull invert the area
 
                 // If the determinant is positive means CCW turn
-                if (det > 0) {
+                if (area > 0) {
                     result.pop_back();
                 } else {
                     break;
@@ -83,29 +93,45 @@ compute_convex_hull(const std::vector<glm::vec2>& input) {
         return result;
     };
 
-    std::vector<glm::vec2> lower = compute_half_convex_hull(false);
-    std::vector<glm::vec2> upper = compute_half_convex_hull(true);
+    std::vector<glm::vec2> lower = compute_half_convex_hull(true);
+    std::vector<glm::vec2> upper = compute_half_convex_hull(false);
     upper.pop_back(); // duplicate vertex
     std::reverse(upper.begin(), upper.end()); // NOTE(alexander): upper is reverse order!!!
     lower.insert(lower.end(), upper.begin(), upper.end());
     return lower;
 }
 
-Triangulation
-compute_fan_triangulation(const std::vector<glm::vec2>& input) {
-    Triangulation result = {};
-    glm::vec2 p = input[0];
-    for (int i = 1; i < input.size() - 1; i++) {
-        result.vertices.push_back(p);
-        result.vertices.push_back(input[i]);
-        result.vertices.push_back(input[i + 1]);
-        result.triangles.push_back(-1); // NOTE(alexander): always one edge that has no neighbor
-        result.triangles.push_back(i*3 - 1);
-        result.triangles.push_back((i == input.size() - 1) ? -1 : i*3 + 1);
-    }
-    return result;
-}
+Triangle
+build_fan_triangulation(Triangulation* result,
+                        Node* node,
+                        const std::vector<glm::vec2>& convex_hull,
+                        int beg,
+                        int end) {
+    glm::vec2 p0 = convex_hull[0];
 
+    if (end - beg <= 1) {
+        glm::vec2* vec = &result->vertices[result->vertices->size() - 1];
+        result->vertices.push_back(p0);
+        result->vertices.push_back(convex_hull[end]);
+        result->vertices.push_back(convex_hull[beg]); // NOTE(alexander): counter-clockwise ordering!
+        
+        Triangle tri = {};
+        tri.vertices[0] = vec;
+        tri.vertices[1] = vec + 1;
+        tri.vertices[2] = vec + 2;
+        node->triangle = &tri;
+        return tri;
+    }
+
+    
+    int split_index = (end - beg) / 2; // NOTE(alexander): maybe not the best choice of split index!
+    node.ray = convex_hull[split_index] - p0;
+    Triangle t1 = build_fan_triangulation(result, &node->children[0], convex_hull, 0, split_index);
+    Triangle t2 = build_fan_triangulation(result, &node->children[1], convex_hull, split_index + 1, end);
+    t1.neighbors[0] = &t2;
+    t2.neighbors[2] = &t1;
+}
+    
 bool
 initialize_scene(Triangulation_Scene* scene) {
     // Generate trandom points
@@ -118,42 +144,44 @@ initialize_scene(Triangulation_Scene* scene) {
         points.push_back(glm::vec2(290.0f + dist(mt), dist(mt)));
     }
 
-    // Setup points vbo
-    glGenBuffers(1, &scene->points_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, scene->points_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(glm::vec2)*points.size(),
-                 &points[0].x,
-                 GL_STATIC_DRAW);
-    scene->points_count = points.size();
+    // Setup points vertex buffer object
+    auto initialize_2d_vao = [](const std::vector<glm::vec2>& data) -> GLuint {
+        GLuint vao, vbo;
+        glGenVertexArrays(1, &vao);
+        glBindVertexArrays(vao);
+        glGenBuffers(1, &vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER,
+                     sizeof(glm::vec2)*data.size(),
+                     &data[0].x,
+                     GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        glDeleteBuffer(vbo);
+        return vao;
+    };
 
-    // Compute convex hull
+    scene->points_vao = initialize_2d_vao(points);
+    scene->points_count = points.size();
+    // The input points are first storted
     std::sort(points.begin(), points.end(), [](glm::vec2 v1, glm::vec2 v2) -> bool {
         if (v1.x == v2.x) return v1.y < v2.y;
         return v1.x < v2.x;
     });
-    printf("first = %f\n, last = %f\n", points[0].x, points[35].x);
-    std::vector<glm::vec2> convex_hull = compute_convex_hull(points);
+
+    // Compute the convex hull
+    std::vector<glm::vec2> convex_hull = build_convex_hull(points);
 
     // Setup convex hull vbo
-    glGenBuffers(1, &scene->convex_hull_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, scene->convex_hull_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(glm::vec2)*convex_hull.size(),
-                 &convex_hull[0].x,
-                 GL_STATIC_DRAW);
+    scene->convex_hull_vao = initialize_2d_vao(convex_hull);
     scene->convex_hull_count = convex_hull.size();
 
 
     // Compute fan triangulation of convex hull
-    Triangulation fan_triangulation = compute_fan_triangulation(convex_hull);
-    glGenBuffers(1, &scene->fan_triangulation_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, scene->fan_triangulation_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(glm::vec2)*fan_triangulation.vertices.size(),
-                 &fan_triangulation.vertices[0].x,
-                 GL_STATIC_DRAW);
-    scene->fan_triangulation_count = fan_triangulation.vertices.size();
+    Triangulation result = {};
+    build_fan_triangulation(&result, &result.root, convex_hull);
+    scene->triangulation_vao = initialize_2d_vao(result.vertices);
+    scene->triangulation_count = fan_triangulation.indices.size();
 
     // Setup vertex shader
     scene->shader = load_glsl_shader_from_sources(vert_shader_source, frag_shader_source);
@@ -194,8 +222,6 @@ update_and_render_scene(Triangulation_Scene* scene) {
 
     // Render fan triangulation
     glBindBuffer(GL_ARRAY_BUFFER, scene->fan_triangulation_vbo);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glUniformMatrix4fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(scene->ortho_projection));
     glUniform4f(scene->color_uniform, 1.0f, 0.0f, 0.0f, 0.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -224,5 +250,14 @@ update_and_render_scene(Triangulation_Scene* scene) {
     // Reset states
     glLineWidth(1);
     glPointSize(1);
-}
 
+    // Begin ImGUI
+    if (ImGui::BeginMainMenuBar()) {
+        static bool file_enabled = true;
+        if (ImGui::BeginMenu("File", file_enabled)) {
+            
+        }
+
+        ImGui::EndMainMenuBar();
+    }
+}
