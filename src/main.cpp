@@ -36,6 +36,49 @@ typedef double    f64;
 
 static bool is_running = true;
 
+struct Input {
+    f32 mouse_x;
+    f32 mouse_y;
+    f32 mouse_scroll_x;
+    f32 mouse_scroll_y;
+    bool left_mb_ended_down;
+    bool right_mb_ended_down;
+    bool middle_mb_ended_down;
+};
+
+struct Window {
+    i32 width;
+    i32 height;
+    Input input;
+};
+
+struct Camera2D {
+    f32 offset_x;
+    f32 offset_y;
+    f32 x;
+    f32 y;
+    f32 zoom;
+};
+
+void
+update_camera_2d(Window* window, Camera2D* camera) {
+    // Camera panning
+    if (window->input.right_mb_ended_down) {
+        camera->x -= (camera->offset_x - window->input.mouse_x)/(camera->zoom + 1.0f);
+        camera->y -= (camera->offset_y - window->input.mouse_y)/(camera->zoom + 1.0f);
+    }
+    camera->offset_x = window->input.mouse_x;
+    camera->offset_y = window->input.mouse_y;
+
+    // Camera zooming
+    f32 prev_mouse_x = window->input.mouse_x/(camera->zoom + 1.0f);
+    f32 prev_mouse_y = window->input.mouse_y/(camera->zoom + 1.0f);
+    camera->zoom += (camera->zoom + 1.0f)*window->input.mouse_scroll_y*0.15f;
+    camera->x += (window->input.mouse_x/(camera->zoom + 1.0f) - prev_mouse_x);
+    camera->y += (window->input.mouse_y/(camera->zoom + 1.0f) - prev_mouse_y);
+    
+}
+
 GLuint
 load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_shader) {
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
@@ -126,13 +169,54 @@ opengl_debug_callback(GLenum source,
     }
 }
 
-void window_size_callback(GLFWwindow* window, i32 width, i32 height) {
-    void* scene = glfwGetWindowUserPointer(window);
-    if (scene) scene_window_size_callback(scene, width, height);
+void
+window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods) {
+    Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
+    if (window) {
+        switch (button) {
+            case GLFW_MOUSE_BUTTON_LEFT: {
+                window->input.left_mb_ended_down = action == GLFW_PRESS;
+            } break;
+
+            case GLFW_MOUSE_BUTTON_RIGHT: {
+                window->input.right_mb_ended_down = action == GLFW_PRESS;
+            } break;
+                
+            case GLFW_MOUSE_BUTTON_MIDDLE: {
+                window->input.middle_mb_ended_down = action == GLFW_PRESS;
+            } break;
+        }
+    }
 }
 
+void
+window_scroll_callback(GLFWwindow* glfw_window, double xoffset, double yoffset) {
+    Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
+    if (window) {
+        window->input.mouse_scroll_x = (f32) xoffset;
+        window->input.mouse_scroll_y = (f32) yoffset;
+    }
+}
 
-int 
+void
+window_cursor_pos_callback(GLFWwindow* glfw_window, double xpos, double ypos) {
+    Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
+    if (window) {
+        window->input.mouse_x = (f32) xpos;
+        window->input.mouse_y = (f32) ypos;
+    }
+}
+
+void
+window_size_callback(GLFWwindow* glfw_window, i32 width, i32 height) {
+    Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
+    if (window) {
+        window->width = width;
+        window->height = height;
+    }
+}
+
+int
 main() {
     if (!glfwInit()) {
         return -1;
@@ -151,16 +235,19 @@ main() {
     glfwWindowHint(GLFW_SAMPLES, 8);
 
     // Creating the window
-    i32 width = 1280;
-    i32 height= 720;
-    GLFWwindow* window = glfwCreateWindow(width, height, "D7045E Lab", 0, 0);
-    glfwMakeContextCurrent(window);
-    if (!window) {
+    Window window = {};
+    window.width = 1280;
+    window.height = 720;
+    
+    GLFWwindow* glfw_window = glfwCreateWindow(window.width, window.height, "D7045E Lab", 0, 0);
+    glfwSetWindowUserPointer(glfw_window, &window);
+    glfwMakeContextCurrent(glfw_window);
+    if (!glfw_window) {
         glfwTerminate();
         return -1;
     }
 
-    // Initializing GLEW, OpenGL 3.0+ is a hard requirement 
+    // Initializing GLEW, OpenGL 3.0+ is a hard requirement
     GLenum result = glewInit();
     assert(result == GLEW_OK);
     if (!(GLEW_VERSION_3_0)) {
@@ -179,41 +266,39 @@ main() {
     }
 
     // Setup glfw callbacks
-    // glfwSetKeyCallback(window,         key_callback);
-    // glfwSetMouseButtonCallback(window, mouse_callback);
-    // glfwSetCursorPosCallback(window,   cursor_pos_callback);
-    // glfwSetCursorEnterCallback(window, enter_callback);
-    // glfwSetScrollCallback(window,      scroll_callback);
-    glfwSetWindowSizeCallback(window,  window_size_callback);
+    // glfwSetKeyCallback(glfw_window,         key_callback);
+    glfwSetMouseButtonCallback(glfw_window, window_mouse_callback);
+    glfwSetCursorPosCallback(glfw_window,   window_cursor_pos_callback);
+    // glfwSetCursorEnterCallback(glfw_window, enter_callback);
+    glfwSetScrollCallback(glfw_window,      window_scroll_callback);
+    glfwSetWindowSizeCallback(glfw_window,  window_size_callback);
 
     // Setup ImGui
     ImGui::CreateContext();
-    ImGui_ImplGlfwGL3_Init(window, false);
-    
+    ImGui_ImplGlfwGL3_Init(glfw_window, false);
+
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->AddFontFromFileTTF("../roboto.ttf", 20);
 
     // Koch_Snowflake_Scene scene = {};
     Triangulation_Scene scene = {};
 
-    glfwSetWindowUserPointer(window, &scene);
-        
-    // Notify the scene what the width and height is
-    scene_window_size_callback(&scene, width, height);
-
     // Programs main loop
-    while (!glfwWindowShouldClose(window) && is_running) {
+    while (!glfwWindowShouldClose(glfw_window) && is_running) {
         ImGui_ImplGlfwGL3_NewFrame();
 
-        update_and_render_scene(&scene);
+        update_and_render_scene(&scene, &window);
 
         ImGui::Render();
 
-        glfwSwapBuffers(window);
+        // reset input mouse scroll
+        window.input.mouse_scroll_x = 0;
+        window.input.mouse_scroll_y = 0;
+        glfwSwapBuffers(glfw_window);
         glfwPollEvents();
     }
 
-    glfwDestroyWindow(window);
+    glfwDestroyWindow(glfw_window);
     ImGui_ImplGlfwGL3_Shutdown();
     glfwTerminate();
     return 0;
