@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <ctime>
 #include <cmath>
+#include <cassert>
 
 #include <string>
 #include <vector>
@@ -36,15 +37,26 @@ typedef double    f64;
 
 static bool is_running = true;
 
+struct Button_State {
+    int half_transition_count;
+    bool ended_down;
+};
+
 struct Input {
     f32 mouse_x;
     f32 mouse_y;
     f32 mouse_scroll_x;
     f32 mouse_scroll_y;
-    bool left_mb_ended_down;
-    bool right_mb_ended_down;
-    bool middle_mb_ended_down;
+    Button_State left_mb;
+    Button_State right_mb;
+    Button_State middle_mb;
 };
+
+bool
+was_pressed(Button_State* state) {
+    return state->half_transition_count > 1 ||
+        (state->half_transition_count == 1 && state->ended_down);
+}
 
 struct Window {
     i32 width;
@@ -60,10 +72,46 @@ struct Camera2D {
     f32 zoom;
 };
 
+struct Mesh {
+    GLuint vbo;
+    GLuint vao;
+    GLsizei count;
+};
+
+inline Mesh
+create_2d_mesh(const std::vector<glm::vec2>& data) {
+    Mesh mesh = {};
+    glGenVertexArrays(1, &mesh.vao);
+    glBindVertexArray(mesh.vao);
+    glGenBuffers(1, &mesh.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 sizeof(glm::vec2)*data.size(),
+                 &data[0].x,
+                 GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glBindVertexArray(0);
+    mesh.count = (GLsizei) data.size();
+    return mesh;
+}
+
+inline void
+update_2d_mesh(Mesh* mesh, const std::vector<glm::vec2>& data) {
+    glBindVertexArray(mesh->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 sizeof(glm::vec2)*data.size(),
+                 &data[0].x,
+                 GL_STATIC_DRAW);
+    glBindVertexArray(0);
+    mesh->count = (GLsizei) data.size();
+}
+
 void
 update_camera_2d(Window* window, Camera2D* camera) {
     // Camera panning
-    if (window->input.right_mb_ended_down) {
+    if (window->input.right_mb.ended_down) {
         camera->x -= (camera->offset_x - window->input.mouse_x)/(camera->zoom + 1.0f);
         camera->y -= (camera->offset_y - window->input.mouse_y)/(camera->zoom + 1.0f);
     }
@@ -74,9 +122,14 @@ update_camera_2d(Window* window, Camera2D* camera) {
     f32 prev_mouse_x = window->input.mouse_x/(camera->zoom + 1.0f);
     f32 prev_mouse_y = window->input.mouse_y/(camera->zoom + 1.0f);
     camera->zoom += (camera->zoom + 1.0f)*window->input.mouse_scroll_y*0.15f;
+    if (camera->zoom < -0.98f) { // NOTE(alexander): prevent zoom increment from going to zero
+        camera->zoom = -0.98f;
+    }
+    if (camera->zoom > 10.0f) { // NOTE(alexander): maximum zoom level
+        camera->zoom = 10.0f;
+    }
     camera->x += (window->input.mouse_x/(camera->zoom + 1.0f) - prev_mouse_x);
     camera->y += (window->input.mouse_y/(camera->zoom + 1.0f) - prev_mouse_y);
-    
 }
 
 GLuint
@@ -175,15 +228,18 @@ window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods)
     if (window) {
         switch (button) {
             case GLFW_MOUSE_BUTTON_LEFT: {
-                window->input.left_mb_ended_down = action == GLFW_PRESS;
+                window->input.left_mb.ended_down = action == GLFW_PRESS;
+                window->input.left_mb.half_transition_count++;
             } break;
 
             case GLFW_MOUSE_BUTTON_RIGHT: {
-                window->input.right_mb_ended_down = action == GLFW_PRESS;
+                window->input.right_mb.ended_down = action == GLFW_PRESS;
+                window->input.right_mb.half_transition_count++;
             } break;
-                
+
             case GLFW_MOUSE_BUTTON_MIDDLE: {
-                window->input.middle_mb_ended_down = action == GLFW_PRESS;
+                window->input.middle_mb.ended_down = action == GLFW_PRESS;
+                window->input.middle_mb.half_transition_count++;
             } break;
         }
     }
@@ -238,7 +294,7 @@ main() {
     Window window = {};
     window.width = 1280;
     window.height = 720;
-    
+
     GLFWwindow* glfw_window = glfwCreateWindow(window.width, window.height, "D7045E Lab", 0, 0);
     glfwSetWindowUserPointer(glfw_window, &window);
     glfwMakeContextCurrent(glfw_window);
@@ -291,9 +347,13 @@ main() {
 
         ImGui::Render();
 
-        // reset input mouse scroll
+        // reset input states mouse scroll
         window.input.mouse_scroll_x = 0;
         window.input.mouse_scroll_y = 0;
+        window.input.left_mb.half_transition_count = 0;
+        window.input.right_mb.half_transition_count = 0;
+        window.input.middle_mb.half_transition_count = 0;
+        
         glfwSwapBuffers(glfw_window);
         glfwPollEvents();
     }
