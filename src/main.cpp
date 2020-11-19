@@ -37,6 +37,11 @@ typedef double    f64;
 
 static bool is_running = true;
 
+enum Scene_Type {
+    Scene_Koch_Snowflake,
+    Scene_Triangulation,
+};
+
 struct Button_State {
     int half_transition_count;
     bool ended_down;
@@ -71,42 +76,6 @@ struct Camera2D {
     f32 y;
     f32 zoom;
 };
-
-struct Mesh {
-    GLuint vbo;
-    GLuint vao;
-    GLsizei count;
-};
-
-inline Mesh
-create_2d_mesh(const std::vector<glm::vec2>& data) {
-    Mesh mesh = {};
-    glGenVertexArrays(1, &mesh.vao);
-    glBindVertexArray(mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(glm::vec2)*data.size(),
-                 &data[0].x,
-                 GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glBindVertexArray(0);
-    mesh.count = (GLsizei) data.size();
-    return mesh;
-}
-
-inline void
-update_2d_mesh(Mesh* mesh, const std::vector<glm::vec2>& data) {
-    glBindVertexArray(mesh->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(glm::vec2)*data.size(),
-                 &data[0].x,
-                 GL_STATIC_DRAW);
-    glBindVertexArray(0);
-    mesh->count = (GLsizei) data.size();
-}
 
 void
 update_camera_2d(Window* window, Camera2D* camera) {
@@ -177,13 +146,13 @@ load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_sh
     }
 
     // Delete vertex and fragment shaders, no longer needed
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    // glDeleteShader(vs);
+    // glDeleteShader(fs);
 
     return program;
 }
 
-// #include "koch_snowflake.cpp"
+#include "koch_snowflake.cpp"
 #include "triangulation.cpp"
 
 void
@@ -222,8 +191,15 @@ opengl_debug_callback(GLenum source,
     }
 }
 
+// void
+// window_key_callback(GLFWWindow* glfw_window, int 
+
 void
 window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods) {
+    if (ImGui::IsMouseHoveringAnyWindow()) {
+        ImGui_ImplGlfwGL3_MouseButtonCallback(glfw_window, button, action, mods);
+        return;
+    }
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
         switch (button) {
@@ -247,6 +223,10 @@ window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods)
 
 void
 window_scroll_callback(GLFWwindow* glfw_window, double xoffset, double yoffset) {
+    if (ImGui::IsMouseHoveringAnyWindow()) {
+        ImGui_ImplGlfwGL3_ScrollCallback(glfw_window, xoffset, yoffset);
+        return;
+    }
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
         window->input.mouse_scroll_x = (f32) xoffset;
@@ -329,22 +309,49 @@ main() {
     glfwSetScrollCallback(glfw_window,      window_scroll_callback);
     glfwSetWindowSizeCallback(glfw_window,  window_size_callback);
 
+    Koch_Snowflake_Scene koch_snowflake_scene = {};
+    Triangulation_Scene triangulation_scene = {};
+    Scene_Type current_scene_type = Scene_Triangulation;
+
     // Setup ImGui
     ImGui::CreateContext();
     ImGui_ImplGlfwGL3_Init(glfw_window, false);
-
     ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->AddFontFromFileTTF("../roboto.ttf", 20);
+    io.Fonts->AddFontFromFileTTF("../roboto.ttf", 18.0f);
 
-    // Koch_Snowflake_Scene scene = {};
-    Triangulation_Scene scene = {};
+    // Vsync
+    glfwSwapInterval(1);
 
     // Programs main loop
     while (!glfwWindowShouldClose(glfw_window) && is_running) {
         ImGui_ImplGlfwGL3_NewFrame();
 
-        update_and_render_scene(&scene, &window);
+        if (ImGui::BeginMainMenuBar()) {
+            static bool labs_enabled = true;
+            if (ImGui::BeginMenu("Labs", labs_enabled)) {
+                if (ImGui::MenuItem("Lab 1 - Koch Snowflake")) current_scene_type = Scene_Koch_Snowflake;
+                if (ImGui::MenuItem("Lab 2 - Triangulation"))  current_scene_type = Scene_Triangulation;
+                ImGui::EndMenu();
+            }
+            ImGui::EndMainMenuBar();
 
+            switch (current_scene_type) {
+                case Scene_Koch_Snowflake: {
+                    update_and_render_scene(&koch_snowflake_scene, &window);
+                } break;
+                    
+                case Scene_Triangulation: {
+                    update_and_render_scene(&triangulation_scene, &window);
+                } break;
+
+                default: { // NOTE(alexander): invalid scene, just render background
+                    glClearColor(1.0f, 0.99f, 0.8f, 1.0f);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                } break;
+            }
+        }
+
+        
         ImGui::Render();
 
         // reset input states mouse scroll

@@ -6,22 +6,6 @@
 
 const int max_recursion_depth = 7;
 
-const char* vert_shader_source =
-    "#version 330\n"
-    "layout(location=0) in vec2 pos;\n"
-    "uniform mat3 transform;\n"
-    "void main() {\n"
-    "    gl_Position = vec4(transform*vec3(pos, 1.0f), 1.0f);\n"
-    "}\n";
-
-const char* frag_shader_source =
-    "#version 330\n"
-    "out vec4 frag_color;\n"
-    "uniform vec4 color;\n"
-    "void main() {\n"
-    "    frag_color = color;\n"
-    "}\n";
-
 struct Koch_Snowflake_Scene {
     // Fill vertex buffer info
     GLuint  fill_vbo[max_recursion_depth];
@@ -128,6 +112,22 @@ initialize_scene(Koch_Snowflake_Scene* scene) {
     // Setup vertex buffers for each snowflake
     gen_koch_showflake_buffers(scene, {}, {}, 1);
 
+    const char* vert_shader_source =
+        "#version 330\n"
+        "layout(location=0) in vec2 pos;\n"
+        "uniform mat3 transform;\n"
+        "void main() {\n"
+        "    gl_Position = vec4(transform*vec3(pos, 1.0f), 1.0f);\n"
+        "}\n";
+
+    const char* frag_shader_source =
+        "#version 330\n"
+        "out vec4 frag_color;\n"
+        "uniform vec4 color;\n"
+        "void main() {\n"
+        "    frag_color = color;\n"
+        "}\n";
+
     // Load shader from sources
     scene->shader = load_glsl_shader_from_sources(vert_shader_source, frag_shader_source);
 
@@ -159,15 +159,7 @@ initialize_scene(Koch_Snowflake_Scene* scene) {
 }
 
 void
-scene_window_size_callback(Koch_Snowflake_Scene* scene, i32 width, i32 height) {
-    i32 size = width < height ? width : height;
-    i32 x = width/2 - size/2;
-    i32 y = height/2 - size/2;
-    glViewport(x, y, size, size);
-}
-
-void
-update_and_render_scene(Koch_Snowflake_Scene* scene) {
+update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
     if (!scene->is_initialized) {
         if (!initialize_scene(scene)) {
             is_running = false;
@@ -196,8 +188,12 @@ update_and_render_scene(Koch_Snowflake_Scene* scene) {
     transform = glm::scale(transform, glm::vec2(scale, scale));
     transform = glm::rotate(transform, scene->rotation);
 
+    // Set viewport
+    i32 size = window->width < window->height ? window->width : window->height;
+    glViewport(window->width/2 - size/2, window->height/2 - size/2, size, size);
+
     // Render and clear background
-    glClearColor(1.0f, 0.99f, 0.8f, 1.0f);
+    glClearColor(0.35f, 0.35f, 0.37f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     // Rendering the koch snowflake
@@ -224,7 +220,10 @@ update_and_render_scene(Koch_Snowflake_Scene* scene) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDrawArrays(GL_LINE_LOOP, 0, scene->outline_count[scene->recursion_depth - 1]);
+
+    // Reset states
     glLineWidth(1);
+    glUseProgram(0);
 
     // Draw GUI
     ImGui::Begin("Koch Snowflake", &scene->show_gui, ImGuiWindowFlags_NoSavedSettings);
