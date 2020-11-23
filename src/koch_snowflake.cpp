@@ -193,7 +193,7 @@ update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
     glViewport(window->width/2 - size/2, window->height/2 - size/2, size, size);
 
     // Render and clear background
-    glClearColor(0.35f, 0.35f, 0.37f, 1.0f);
+    glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
     // Rendering the koch snowflake
@@ -204,7 +204,7 @@ update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
     // Draw fill
-    glUniform4f(scene->color_uniform, 1.0f, 0.0f, 0.0f, 0.0f);
+    glUniform4fv(scene->color_uniform, 1, glm::value_ptr(primary_fg_color));
     if (scene->enable_wireframe) {
         glLineWidth(3);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);

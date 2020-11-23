@@ -44,8 +44,6 @@ struct Triangulation_Scene {
     bool is_initialized;
 };
 
-static const glm::vec4 default_color = glm::vec4(0.3f, 0.5f, 0.8f, 0.0f);
-
 inline float
 triangle_area(const glm::vec2& a, const glm::vec2& b, const glm::vec2& c) {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -84,9 +82,9 @@ build_convex_hull(const std::vector<glm::vec2>& points,
     result = compute_half_convex_hull(points_inside, true);
     std::vector<glm::vec2> upper = compute_half_convex_hull(points_inside, false);
 
-     // HACK(alexander): remove points inside lower hull that are on the upper hull
-    for (int i = 0; i < points_inside.size(); i++) {
-        for (auto q : upper) {
+    // HACK(alexander): remove points inside lower hull that are on the upper hull
+    for (auto q : upper) {
+        for (int i = 0; i < points_inside.size(); i++) {
             auto v = points_inside[i];
             if (v == q) {
                 points_inside.erase(points_inside.begin() + i);
@@ -109,9 +107,9 @@ build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, int beg, int 
 
     if (end - beg == 1) { // NOTE(alexander): base case
         Triangle* t = new Triangle();
-        t->v[0] = { p0, default_color };
-        t->v[1] = { convex_hull[beg], default_color };
-        t->v[2] = { convex_hull[end], default_color };
+        t->v[0] = { p0, primary_fg_color };
+        t->v[1] = { convex_hull[beg], primary_fg_color };
+        t->v[2] = { convex_hull[end], primary_fg_color };
         node->triangle = t;
         node->origin = p0;
         node->ray = convex_hull[beg];
@@ -136,75 +134,116 @@ build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, int beg, int 
     return node;
 }
 
-Node*
-point_location(Node* node, glm::vec2 p) {
-    if (node->triangle) return node;
-
+void
+point_location(Node* node, glm::vec2 p, std::vector<Node*>* result) {
+    if (!node) return;
+    if (node->triangle) {
+        result->push_back(node);
+        return;
+    }
+    if (node->children_count <= 1) return;
+    
     glm::vec2 origin = node->children[0]->origin;
 
-
     if (node->children_count == 2) {
-        glm::vec2 v1 = node->children[1]->ray;
-        if (triangle_area(origin, p, v1) < 0) {
-            return point_location(node->children[0], p);
+        f32 d0 = triangle_area(origin, p, node->children[0]->ray);
+        f32 d1 = triangle_area(origin, p, node->children[1]->ray);
+        f32 area = triangle_area(origin, p, node->children[1]->ray);
+        if (d0 >= 0 && d1 <= 0) {
+            point_location(node->children[0], p, result);
         }
-        return point_location(node->children[1], p);
-        
+        if (d1 >= 0) {
+            point_location(node->children[1], p, result);
+        }
+
     } else if (node->children_count == 3) {
-        glm::vec2 v0 = node->children[0]->ray;
-        glm::vec2 v1 = node->children[1]->ray;
-        glm::vec2 v2 = node->children[2]->ray;
-        f32 d0 = triangle_area(origin, p, v0);
-        f32 d1 = triangle_area(origin, p, v1);
-        f32 d2 = triangle_area(origin, p, v2);
-        
-        if (d0 > 0 && d1 < 0) {
-            return point_location(node->children[0], p);
-        } else if (d1 > 0 && d2 < 0) {
-            return point_location(node->children[1], p);
-        } else {
-            return point_location(node->children[2], p);
+        f32 d0 = triangle_area(origin, p, node->children[0]->ray);
+        f32 d1 = triangle_area(origin, p, node->children[1]->ray);
+        f32 d2 = triangle_area(origin, p, node->children[2]->ray);
+        if (d0 >= 0 && d1 <= 0) {
+            point_location(node->children[0], p, result);
+        }
+        if (d1 >= 0 && d2 <= 0) {
+            point_location(node->children[1], p, result);
+        }
+        if (d2 >= 0 && d0 <= 0) {
+            point_location(node->children[2], p, result);
         }
     }
-
-    assert(0 && "can't happen");
-    return NULL;
 } 
 
 void
-split_triangle_at_point(Triangulation* result, Node* node, glm::vec2 p) {
-    assert(node->triangle && "not a leaf node");
+split_triangle_at_point(Triangulation* result, glm::vec2 p) {
+    std::vector<Node*> nodes;
+    point_location(result->root, p, &nodes);
 
-    // NOTE(alexander): split triangle into three pieces, common case!
-    Triangle* t  = node->triangle;
-    Triangle* t1 = new Triangle();
-    Triangle* t2 = new Triangle();
-    Triangle* t3 = new Triangle();
-    Vertex pv = { p, default_color };
-    t1->v[0] = t->v[0]; t1->v[1] = t->v[1], t1->v[2] = pv;
-    t2->v[0] = t->v[1]; t2->v[1] = t->v[2]; t2->v[2] = pv;
-    t3->v[0] = t->v[2]; t3->v[1] = t->v[0]; t3->v[2] = pv;
-    t1->neighbors[0] = t->neighbors[0]; t1->neighbors[1] = t3; t1->neighbors[2] = t2;
-    t2->neighbors[0] = t->neighbors[1]; t2->neighbors[1] = t1; t2->neighbors[2] = t3;
-    t3->neighbors[0] = t->neighbors[2]; t3->neighbors[1] = t1; t3->neighbors[2] = t2;
-    Node* n1 = new Node();
-    Node* n2 = new Node();
-    Node* n3 = new Node();
-    n1->origin = p;
-    n1->ray = t->v[0].pos;
-    n1->triangle = t1;
-    n2->origin = p;    
-    n2->ray = t->v[1].pos;
-    n2->triangle = t2;
-    n3->origin = p;
-    n3->ray = t->v[2].pos;
-    n3->triangle = t3;
-    node->children[0] = n1;
-    node->children[1] = n2;
-    node->children[2] = n3;
-    node->children_count = 3;
-    node->triangle = NULL;
-    delete t;
+    for (auto node : nodes) {
+        assert(node->triangle && "not a leaf node");
+        Triangle* t  = node->triangle;
+        Triangle* t1 = new Triangle();
+        Triangle* t2 = new Triangle();
+        Node* n1 = new Node();
+        Node* n2 = new Node();
+        Vertex pv = { p, primary_fg_color };
+        
+        n1->origin = p;
+        n1->triangle = t1;
+        n2->origin = p;
+        n2->triangle = t2;
+        node->children[0] = n1;
+        node->children[1] = n2;
+        node->children_count = 2;
+        
+        // NOTE(alexander): 3 literal edge case - splits into two triangles
+        if (triangle_area(t->v[0].pos, t->v[1].pos, p) == 0) {
+            t1->v[0] = pv; t1->v[1] = t->v[1]; t1->v[2] = t->v[2];
+            t2->v[0] = pv; t2->v[1] = t->v[2]; t2->v[2] = t->v[0];
+            t1->neighbors[0] = t->neighbors[0]; t1->neighbors[1] = t->neighbors[1]; t1->neighbors[2] = t2;
+            t2->neighbors[0] = t->neighbors[0]; t2->neighbors[1] = t1; t2->neighbors[2] = t->neighbors[2];
+            n1->ray = t->v[1].pos;
+            n2->ray = t->v[2].pos;
+
+        } else if (triangle_area(t->v[1].pos, t->v[2].pos, p) == 0) {
+            t1->v[0] = pv; t1->v[1] = t->v[2]; t1->v[2] = t->v[0];
+            t2->v[0] = pv; t2->v[1] = t->v[0]; t2->v[2] = t->v[1];
+            t1->neighbors[0] = t->neighbors[1]; t1->neighbors[1] = t->neighbors[2]; t1->neighbors[2] = t2;
+            t2->neighbors[0] = t->neighbors[1]; t2->neighbors[1] = t1; t2->neighbors[2] = t->neighbors[0];
+            n1->ray = t->v[2].pos;
+            n2->ray = t->v[0].pos;
+
+        } else if (triangle_area(t->v[2].pos, t->v[0].pos, p) == 0) {
+            t1->v[0] = pv; t1->v[1] = t->v[0]; t1->v[2] = t->v[1];
+            t2->v[0] = pv; t2->v[1] = t->v[1], t2->v[2] = t->v[2];
+            t1->neighbors[0] = t->neighbors[2]; t1->neighbors[1] = t->neighbors[0]; t1->neighbors[2] = t2;
+            t2->neighbors[0] = t->neighbors[2]; t2->neighbors[1] = t1; t2->neighbors[2] = t->neighbors[1];
+            n1->ray = t->v[0].pos;
+            n2->ray = t->v[1].pos;
+
+        } else { // NOTE(alexander): common case - splits into three triangles
+            Node* n3 = new Node();
+            Triangle* t3 = new Triangle();
+            n3->origin = p;
+            n3->triangle = t3;
+
+            t1->v[0] = t->v[0]; t1->v[1] = t->v[1], t1->v[2] = pv;
+            t2->v[0] = t->v[1]; t2->v[1] = t->v[2]; t2->v[2] = pv;
+            t3->v[0] = t->v[2]; t3->v[1] = t->v[0]; t3->v[2] = pv;
+            t1->neighbors[0] = t->neighbors[0]; t1->neighbors[1] = t3; t1->neighbors[2] = t2;
+            t2->neighbors[0] = t->neighbors[1]; t2->neighbors[1] = t1; t2->neighbors[2] = t3;
+            t3->neighbors[0] = t->neighbors[2]; t3->neighbors[1] = t1; t3->neighbors[2] = t2;
+            
+            n1->ray = t->v[0].pos;
+            n2->ray = t->v[1].pos;
+            n3->ray = t->v[2].pos;
+            
+            node->children[2] = n3;
+            node->children_count = 3;
+
+        }
+
+        node->triangle = NULL;
+        delete t;
+    }
 }
 
 void
@@ -235,21 +274,40 @@ build_triangulation_of_points(const std::vector<glm::vec2>& points, std::mt19937
 
     // Shuffle the order of points inside convex hull, avoid adversarial input
     std::shuffle(points_inside_convex_hull.begin(), points_inside_convex_hull.end(), rng);
+
+    printf("points: %zu\n", points.size());
+    printf("points on the hull: %zu\n", convex_hull.size());
+    printf("points inside convex hull: %zu\n\n", points_inside_convex_hull.size());
     
     // Compute fan triangulation of convex hull
     Triangulation result = {};
     Node* search_tree = build_fan_triangulation(convex_hull, 0, (int) convex_hull.size() - 1);
-    printf("points inside hull: %zu\n", points_inside_convex_hull.size());
+    result.root = search_tree;
+
     for (auto v : points_inside_convex_hull) {
-        Node* leaf_node = point_location(search_tree, v);
-        if (leaf_node->triangle) {
-            split_triangle_at_point(&result, leaf_node, v);
-        }
+        split_triangle_at_point(&result, v);
     }
 
-    build_vertex_sequence(search_tree, &result.vertices);
-    result.root = search_tree;
+    build_vertex_sequence(result.root, &result.vertices);
+    
     return result;
+}
+
+void
+destroy_triangulation(Triangulation* tri, Node* node=NULL) {
+    if (!tri->root) return;
+    if (!node) node = tri->root;
+
+    if (node->triangle) {
+        delete node->triangle;
+    }
+    
+    for (auto child : node->children) {
+        if (!child) continue;
+        destroy_triangulation(tri, child);
+    }
+
+    delete node;
 }
 
 bool
@@ -328,15 +386,6 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         }
     }
 
-    auto retriangulate_points = [scene]() {
-        scene->triangulation = build_triangulation_of_points(scene->points, scene->rng);
-        scene->count = (GLsizei) scene->triangulation.vertices.size();
-        GLvoid* data = 0;
-        if (scene->count > 0) data = &scene->triangulation.vertices[0];
-        glBindBuffer(GL_ARRAY_BUFFER, scene->vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*scene->count, data, GL_STATIC_DRAW);
-    };
-
     // Setup orthographic projection and camera transform
     update_camera_2d(window, &scene->camera);
     glm::mat4 transform = glm::ortho(0.0f, (f32) window->width, (f32) window->height, 0.0f, 0.0f, 1000.0f);
@@ -346,24 +395,57 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     // Bind vertex array
     glBindVertexArray(scene->vao);
 
-    // Push new vertex interactively
+    auto retriangulate_points = [scene]() {
+        destroy_triangulation(&scene->triangulation);
+        scene->triangulation = build_triangulation_of_points(scene->points, scene->rng);
+        scene->count = (GLsizei) scene->triangulation.vertices.size();
+        GLvoid* data = 0;
+        if (scene->count > 0) data = &scene->triangulation.vertices[0];
+        glBindBuffer(GL_ARRAY_BUFFER, scene->vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*scene->count, data, GL_STATIC_DRAW);
+    };
+
+    // Mouse interaction
     f32 x = (window->input.mouse_x/(scene->camera.zoom + 1.0f) - scene->camera.x);
     f32 y = (window->input.mouse_y/(scene->camera.zoom + 1.0f) - scene->camera.y);
     if (was_pressed(&window->input.left_mb)) {
-        scene->points.push_back(glm::vec2(x, y));
-        retriangulate_points();
-    }
+        if (window->input.shift_key.ended_down) {
+            // Push new vertex interactively
+            scene->points.push_back(glm::vec2(x, y));
+            retriangulate_points();
+            
+        } else {
+            // Point location color selected node
+            std::vector<Node*> nodes;
+            point_location(scene->triangulation.root, glm::vec2(x, y), &nodes);
+            for (auto node : nodes) {
+                if (!node->triangle) continue;
+                node->triangle->v[0].color = secondary_fg_color;
+                node->triangle->v[1].color = secondary_fg_color;
+                node->triangle->v[2].color = secondary_fg_color;
+            }
 
-    if (was_pressed(&window->input.right_mb) && scene->points.size() > 0) {
-        scene->points.pop_back();
-        retriangulate_points();
+            std::vector<Vertex> vertices;
+            build_vertex_sequence(scene->triangulation.root, &vertices);
+            GLvoid* data = 0;
+            if (scene->count > 0) data = &vertices[0];
+            glBindBuffer(GL_ARRAY_BUFFER, scene->vbo);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*scene->count, data, GL_STATIC_DRAW);
+
+            for (auto node : nodes) {
+                if (!node->triangle) continue;
+                node->triangle->v[0].color = primary_fg_color;
+                node->triangle->v[1].color = primary_fg_color;
+                node->triangle->v[2].color = primary_fg_color;
+            }
+        }
     }
 
     // Set viewport
     glViewport(0, 0, window->width, window->height);
 
     // Render and clear background
-    glClearColor(0.35f, 0.35f, 0.37f, 1.0f);
+    glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
     // Enable shader
@@ -398,6 +480,16 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         scene->points.clear();
         retriangulate_points();
     }
+    if (ImGui::Button("Fixed Points")) {
+        scene->points.clear();
+        scene->points.push_back(glm::vec2(200,  400));
+        scene->points.push_back(glm::vec2(1000, 400));
+        scene->points.push_back(glm::vec2(600,  200));
+        scene->points.push_back(glm::vec2(800,  200));
+        scene->points.push_back(glm::vec2(600,  600));
+        scene->points.push_back(glm::vec2(600,  400));
+        retriangulate_points();
+    }
     if (ImGui::Button("Randomize Points")) {
         scene->points.clear();
         std::uniform_real_distribution<float> dist(10.0f, 710.0f);
@@ -406,6 +498,12 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         }
         retriangulate_points();
     }
+    if (ImGui::Button("Remove Last Point") && scene->points.size() > 0) {
+        scene->points.pop_back();
+        retriangulate_points();
+    }
+    ImGui::Text("Number of points: %zu", scene->points.size());
+    ImGui::Text("Number of triangles: %zu", scene->triangulation.vertices.size()/3);
     ImGui::Text("x = %.3f", x);
     ImGui::Text("y = %.3f", y);
     ImGui::End();

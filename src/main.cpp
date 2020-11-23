@@ -35,6 +35,9 @@ typedef size_t    usize;
 typedef float     f32;
 typedef double    f64;
 
+static const glm::vec4 primary_bg_color = glm::vec4(0.35f, 0.35f, 0.37f, 1.0f);
+static const glm::vec4 primary_fg_color = glm::vec4(0.3f, 0.5f, 0.8f, 0.0f);
+static const glm::vec4 secondary_fg_color = glm::vec4(0.46f, 0.72f, 1.0f, 0.0f);
 static bool is_running = true;
 
 enum Scene_Type {
@@ -55,6 +58,10 @@ struct Input {
     Button_State left_mb;
     Button_State right_mb;
     Button_State middle_mb;
+
+    Button_State alt_key;
+    Button_State shift_key;
+    Button_State control_key;
 };
 
 bool
@@ -146,8 +153,8 @@ load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_sh
     }
 
     // Delete vertex and fragment shaders, no longer needed
-    // glDeleteShader(vs);
-    // glDeleteShader(fs);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
 
     return program;
 }
@@ -191,8 +198,31 @@ opengl_debug_callback(GLenum source,
     }
 }
 
-// void
-// window_key_callback(GLFWWindow* glfw_window, int 
+void
+window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, int mods) {
+    if (action == GLFW_REPEAT) return; // NOTE(alexander): don't care about repeat, breaks my input system!
+    Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
+    switch (key) {
+        case GLFW_KEY_LEFT_ALT: 
+        case GLFW_KEY_RIGHT_ALT: {
+            window->input.alt_key.ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
+            window->input.alt_key.half_transition_count++;
+        } break;
+            
+        case GLFW_KEY_LEFT_SHIFT: 
+        case GLFW_KEY_RIGHT_SHIFT: {
+            window->input.shift_key.ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
+            window->input.shift_key.half_transition_count++;
+        } break;
+            
+        case GLFW_KEY_LEFT_CONTROL: 
+        case GLFW_KEY_RIGHT_CONTROL: {
+            window->input.control_key.ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
+            window->input.control_key.half_transition_count++;
+        } break;
+
+    }
+}
 
 void
 window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods) {
@@ -200,6 +230,7 @@ window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods)
         ImGui_ImplGlfwGL3_MouseButtonCallback(glfw_window, button, action, mods);
         return;
     }
+
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
         switch (button) {
@@ -302,7 +333,7 @@ main() {
     }
 
     // Setup glfw callbacks
-    // glfwSetKeyCallback(glfw_window,         key_callback);
+    glfwSetKeyCallback(glfw_window,         window_key_callback);
     glfwSetMouseButtonCallback(glfw_window, window_mouse_callback);
     glfwSetCursorPosCallback(glfw_window,   window_cursor_pos_callback);
     // glfwSetCursorEnterCallback(glfw_window, enter_callback);
@@ -345,7 +376,7 @@ main() {
                 } break;
 
                 default: { // NOTE(alexander): invalid scene, just render background
-                    glClearColor(1.0f, 0.99f, 0.8f, 1.0f);
+                    glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
                     glClear(GL_COLOR_BUFFER_BIT);
                 } break;
             }
