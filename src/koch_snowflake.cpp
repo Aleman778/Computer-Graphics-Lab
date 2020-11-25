@@ -21,9 +21,9 @@ struct Koch_Snowflake_Scene {
     GLint   color_uniform;
 
     // Transformation data
-    float translation;
-    float rotation;
-    float scale;
+    f32 translation;
+    f32 rotation;
+    f32 scale;
 
     // Render state
     int recursion_depth;
@@ -36,7 +36,7 @@ struct Koch_Snowflake_Scene {
     bool is_initialized;
 };
 
-void
+static void
 gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
                            std::vector<glm::vec2> curr_outline,
                            std::vector<glm::vec2> fill,
@@ -104,7 +104,7 @@ gen_koch_showflake_buffers(Koch_Snowflake_Scene* scene,
     gen_koch_showflake_buffers(scene, next_outline, fill, depth + 1);
 }
 
-bool
+static bool
 initialize_scene(Koch_Snowflake_Scene* scene) {
     glGenBuffers(max_recursion_depth, scene->outline_vbo);
     glGenBuffers(max_recursion_depth, scene->fill_vbo);
@@ -167,7 +167,7 @@ update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
         }
     }
 
-    float scale = cos(scene->scale) * 0.4f + 0.6f;
+    f32 scale = cos(scene->scale) * 0.4f + 0.6f;
     if (scene->enable_scale) {
         scene->scale += 0.02f;
     }
@@ -226,7 +226,7 @@ update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
     glUseProgram(0);
 
     // Draw GUI
-    ImGui::Begin("Koch Snowflake", &scene->show_gui, ImGuiWindowFlags_NoSavedSettings);
+    ImGui::Begin("Lab 1 - Koch Snowflake", &scene->show_gui, ImVec2(180, 220), ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::Text("Recursion Depth");
     ImGui::SliderInt("", &scene->recursion_depth, 1, max_recursion_depth);
