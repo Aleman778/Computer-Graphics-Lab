@@ -91,7 +91,7 @@ build_convex_hull(const std::unordered_set<glm::vec2>& point_set, std::vector<gl
 
 static Node*
 build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, Triangulation* triangulation) {
-    usize num_tris = convex_hull.size() - 2;
+    int num_tris = (int) convex_hull.size() - 2;
     if (num_tris <= 0) return new Node();
 
     triangulation->vertices.reserve(convex_hull.size());
@@ -131,7 +131,7 @@ build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, Triangulation
         return node;
     };
 
-    triangulation->root = build_search_tree(0, (int) num_tris);
+    triangulation->root = build_search_tree(0, num_tris);
     return triangulation->root;
 }
 
@@ -495,6 +495,7 @@ initialize_scene(Triangulation_Scene* scene) {
     }
 
     // Setup default settings
+    scene->coloring_option = 0; // Default
     scene->is_initialized = true;
 
     return true;
@@ -581,7 +582,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     auto retriangulate_points = [scene]() {
         destroy_triangulation(&scene->triangulation);
         scene->triangulation = build_triangulation_of_points(scene->points, scene->rng);
-        calculate_distance_coloring(scene);
+        if (scene->coloring_option == 1) calculate_distance_coloring(scene);
         update_scene_buffer_data(scene);
     };
 
