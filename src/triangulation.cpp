@@ -6,7 +6,6 @@ struct Triangle {
 };
 
 struct Node {
-    Node* parent; // if this is root node, then parent is NULL
     glm::vec2 ray; // ray is vector pointing out from origin point
     glm::vec2 origin; // origin point
     Triangle* triangle; // for non-leaf nodes this is NULL
@@ -42,6 +41,10 @@ struct Triangulation_Scene {
     Camera2D camera;
 
     std::mt19937 rng;
+
+    glm::vec4 primary_color;
+    glm::vec4 secondary_color;
+    glm::vec4 colors[4]; // used in 4-coloring mode
 
     bool show_gui;
 
@@ -495,6 +498,14 @@ initialize_scene(Triangulation_Scene* scene) {
         return false;
     }
 
+    // Initialize colors
+    scene->primary_color = primary_fg_color;
+    scene->secondary_color = secondary_fg_color;
+    scene->colors[0] = red_color;
+    scene->colors[1] = green_color;
+    scene->colors[2] = blue_color;
+    scene->colors[3] = magenta_color;
+
     // Setup default settings
     scene->coloring_option = 0; // Default
     scene->is_initialized = true;
@@ -503,28 +514,31 @@ initialize_scene(Triangulation_Scene* scene) {
 }
 
 static void // NOTE(alexander): assumes correct vertex array object is bound!
-update_scene_buffer_data(Triangulation_Scene* scene) {
+update_scene_buffer_data(Triangulation_Scene* scene, bool update_ibo=true) {
     GLvoid* vdata = 0;
     GLvoid* idata = 0;
     scene->vertex_count = (GLsizei) scene->triangulation.vertices.size();
-    scene->index_count = (GLsizei) scene->triangulation.indices.size();
+    if (update_ibo) scene->index_count = (GLsizei) scene->triangulation.indices.size();
+    else scene->index_count = 0;
     if (scene->vertex_count > 0) vdata = &scene->triangulation.vertices[0];
     if (scene->index_count > 0)  idata = &scene->triangulation.indices[0];
     glBindBuffer(GL_ARRAY_BUFFER, scene->vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*scene->vertex_count, vdata, GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene->ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint)*scene->index_count, idata, GL_STATIC_DRAW);
+    if (update_ibo) {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene->ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint)*scene->index_count, idata, GL_STATIC_DRAW);
+    }
 }
 
 static void
-push_highlight_triangle(Triangulation* triangulation, Triangle* t) {
+push_highlight_triangle(Triangulation* triangulation, Triangle* t, glm::vec4 color) {
     glm::vec2 p0 = triangulation->vertices[t->v[0]].pos;
     glm::vec2 p1 = triangulation->vertices[t->v[1]].pos;
     glm::vec2 p2 = triangulation->vertices[t->v[2]].pos;
     uint index = (uint) triangulation->vertices.size();
-    triangulation->vertices.push_back({ p0, secondary_fg_color });
-    triangulation->vertices.push_back({ p1, secondary_fg_color });
-    triangulation->vertices.push_back({ p2, secondary_fg_color });
+    triangulation->vertices.push_back({ p0, color });
+    triangulation->vertices.push_back({ p1, color });
+    triangulation->vertices.push_back({ p2, color });
     triangulation->indices[t->index]     = index;
     triangulation->indices[t->index + 1] = index + 1;
     triangulation->indices[t->index + 2] = index + 2;
@@ -574,9 +588,85 @@ calculate_distance_coloring(Triangulation_Scene* scene) {
     update_scene_buffer_data(scene);
 }
 
+static void
+calculate_4_coloring(Triangulation_Scene* scene) {
+    Triangulation* triangulation = &scene->triangulation;
+
+    // Construct new vertices 
+    std::vector<Vertex> vertices;
+
+    std::unordered_map<usize, int> tcolors; // remember triangle colors as index into scene->colors
+
+    std::function<void(Node*)> dfs_4_coloring;
+    dfs_4_coloring = [&tcolors, &vertices, &dfs_4_coloring, triangulation, scene](Node* node) {
+        if (!node) return;
+        Triangle* t = node->triangle;
+        if (t) {
+            Triangle* t1 = t->n[0];
+            Triangle* t2 = t->n[1];
+            Triangle* t3 = t->n[2];
+            int c1 = -1;
+            int c2 = -1;
+            int c3 = -1;
+            if (t1) {
+                auto it = tcolors.find(t1->index);
+                c1 = it != tcolors.end() ? it->second : -1;
+            }
+            if (t2) {
+                auto it = tcolors.find(t2->index);
+                c2 = it != tcolors.end() ? it->second : -1;
+            }
+            if (t3) {
+                auto it = tcolors.find(t3->index);
+                c3 = it != tcolors.end() ? it->second : -1;
+            }
+
+            // Find unique color that is not already choosen
+            int color = (c1 + 1)%4;
+            if (c2 == color) {
+                color = (c2 + 1)%4;
+                if (c3 == color) color = (color + 1)%4;
+                if (c1 == color) color = (color + 1)%4;
+            }
+            if (c3 == color) {
+                color = (c3 + 1)%4;
+                if (c1 == color) color = (color + 1)%4;
+                if (c2 == color) color = (color + 1)%4;
+            }
+            tcolors.emplace(t->index, color);
+
+            Vertex v0 = triangulation->vertices[t->v[0]];
+            Vertex v1 = triangulation->vertices[t->v[1]];
+            Vertex v2 = triangulation->vertices[t->v[2]];
+            v0.color = scene->colors[color];
+            v1.color = scene->colors[color];
+            v2.color = scene->colors[color];
+            vertices.push_back(v0);
+            vertices.push_back(v1);
+            vertices.push_back(v2);
+        }
+
+        if (node->children_count > 0) dfs_4_coloring(node->children[0]);
+        if (node->children_count > 1) dfs_4_coloring(node->children[1]);
+        if (node->children_count > 2) dfs_4_coloring(node->children[2]);
+    };
+
+    // Color by depth first search
+    dfs_4_coloring(triangulation->root);
+
+    // Update the buffers, set the triangulation vertices
+    std::vector<Vertex> old_vertices = triangulation->vertices;
+    triangulation->vertices = vertices;
+    update_scene_buffer_data(scene, false); // ignore use of ibo
+    
+    // Restore vertices and index count
+    triangulation->vertices = old_vertices;
+}
+
 static void // NOTE(alexander): visited contains triangle indices which uniquely identifies one triangle
 calculate_extended_picking(Triangulation* triangulation,
                            std::unordered_set<usize>* visited,
+                           glm::vec4 highlight_color,
                            Triangle* t,
                            Triangle* curr,
                            Triangle* prev) {
@@ -590,14 +680,14 @@ calculate_extended_picking(Triangulation* triangulation,
         return;
     }
     
-    push_highlight_triangle(triangulation, curr);
+    push_highlight_triangle(triangulation, curr, highlight_color);
 
     int prev_index = 0;
     if      (curr->n[0] == prev) prev_index = 0;
     else if (curr->n[1] == prev) prev_index = 1;
     else if (curr->n[2] == prev) prev_index = 2;
-    calculate_extended_picking(triangulation, visited, t, curr->n[(prev_index + 1)%3], curr);
-    calculate_extended_picking(triangulation, visited, t, curr->n[(prev_index + 2)%3], curr);
+    calculate_extended_picking(triangulation, visited, highlight_color, t, curr->n[(prev_index + 1)%3], curr);
+    calculate_extended_picking(triangulation, visited, highlight_color, t, curr->n[(prev_index + 2)%3], curr);
 }
 
 void
@@ -620,18 +710,21 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     // Bind vertex array
     glBindVertexArray(scene->vao);
 
-    auto retriangulate_points = [scene]() {
-        destroy_triangulation(&scene->triangulation);
-        scene->triangulation = build_triangulation_of_points(scene->points, scene->rng);
-        if (scene->coloring_option == 1) calculate_distance_coloring(scene);
-        update_scene_buffer_data(scene);
-    };
-
     auto set_solid_color = [scene](glm::vec4 color) {
         for (int i = 0; i < scene->triangulation.vertices.size(); i++) {
             scene->triangulation.vertices[i].color = color;
         }
         update_scene_buffer_data(scene);
+    };
+
+    auto retriangulate_points = [scene, &set_solid_color]() {
+        destroy_triangulation(&scene->triangulation);
+        scene->triangulation = build_triangulation_of_points(scene->points, scene->rng);
+        switch (scene->coloring_option) {
+            case 1: calculate_distance_coloring(scene); break;
+            case 2: calculate_4_coloring(scene); break;
+            default: set_solid_color(scene->primary_color); break;
+        }
     };
 
     // Mouse interaction
@@ -656,13 +749,13 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
                 std::vector<uint> indices = triangulation->indices;
 
                 // Create a new vertices that will render the selected triangle
-                push_highlight_triangle(triangulation, t);
+                push_highlight_triangle(triangulation, t, scene->secondary_color);
 
                 if (scene->picking_option == 1) {
                     std::unordered_set<usize> visited;
-                    calculate_extended_picking(triangulation, &visited, t, t->n[0], t);
-                    calculate_extended_picking(triangulation, &visited, t, t->n[1], t);
-                    calculate_extended_picking(triangulation, &visited, t, t->n[2], t);
+                    calculate_extended_picking(triangulation, &visited, scene->secondary_color, t, t->n[0], t);
+                    calculate_extended_picking(triangulation, &visited, scene->secondary_color, t, t->n[1], t);
+                    calculate_extended_picking(triangulation, &visited, scene->secondary_color, t, t->n[2], t);
                 }
 
                 // Update buffers
@@ -689,21 +782,21 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     glUniformMatrix4fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(transform));
     glUniform4f(scene->tint_color_uniform, 1.0f, 1.0f, 1.0f, 1.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
-    // glDrawArrays(GL_TRIANGLES, 0, scene->vertex_count);
+    if (scene->index_count > 0) glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
+    else glDrawArrays(GL_TRIANGLES, 0, scene->vertex_count);
 
     // Render `outlined` triangulated shape
     glLineWidth(scene->camera.zoom*0.5f + 2.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glUniform4f(scene->tint_color_uniform, 0.4f, 0.4f, 0.4f, 1.0f);
-    glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
-    // glDrawArrays(GL_TRIANGLES, 0, scene->vertex_count);
+    if (scene->index_count > 0) glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
+    else glDrawArrays(GL_TRIANGLES, 0, scene->vertex_count);
 
     // Render `points` used in triangulated shape
     glUniform4f(scene->tint_color_uniform, 0.4f, 0.4f, 0.4f, 1.0f);
     glPointSize((scene->camera.zoom + 2.0f) + 4.0f);
-    glDrawElements(GL_POINTS, scene->index_count, GL_UNSIGNED_INT, 0);
-    // glDrawArrays(GL_POINTS, 0, scene->vertex_count);
+    if (scene->index_count > 0) glDrawElements(GL_POINTS, scene->index_count, GL_UNSIGNED_INT, 0);
+    else glDrawArrays(GL_POINTS, 0, scene->vertex_count);
 
     // Begin ImGui
     ImGui::Begin("Lab 2 - Triangulation", &scene->show_gui, ImVec2(280, 350), ImGuiWindowFlags_NoSavedSettings);
@@ -734,18 +827,20 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     ImGui::Text("Picking options:");
     if (ImGui::RadioButton("Default picking", &scene->picking_option, 0)) {
         if (scene->coloring_option == 1) calculate_distance_coloring(scene);
-        else set_solid_color(primary_fg_color);
+        else set_solid_color(scene->primary_color);
     }
     ImGui::RadioButton("Extended picking", &scene->picking_option, 1);
     
     ImGui::Text("Coloring options:");
     if (ImGui::RadioButton("Solid color", &scene->coloring_option, 0)) {
-        set_solid_color(primary_fg_color);
+        set_solid_color(scene->primary_color);
     }
     if (ImGui::RadioButton("Coloring based on distance", &scene->coloring_option, 1)) {
         calculate_distance_coloring(scene);
     }
-    ImGui::RadioButton("4 Coloring", &scene->coloring_option, 2);
+    if (ImGui::RadioButton("4 Coloring", &scene->coloring_option, 2)) {
+        calculate_4_coloring(scene);
+    }
 
     ImGui::Text("Info:");
     ImGui::Text("Number of points: %zu", scene->points.size());

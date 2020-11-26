@@ -9,6 +9,7 @@
 #include <random>
 #include <functional>
 #include <unordered_set>
+#include <unordered_map>
 
 #include <glm.hpp>
 #include <gtx/hash.hpp>
@@ -39,12 +40,13 @@ typedef size_t    usize;
 typedef float     f32;
 typedef double    f64;
 
-static const glm::vec4 red_color          = glm::vec4(1.0f, 0.4f, 0.4f, 1.0f);
-static const glm::vec4 green_color        = glm::vec4(0.4f, 1.0f, 0.4f, 1.0f);
-static const glm::vec4 blue_color         = glm::vec4(0.3f, 0.3f, 1.0f, 1.0f);
+static const glm::vec4 red_color          = glm::vec4(1.0f,  0.4f,  0.4f,  1.0f);
+static const glm::vec4 green_color        = glm::vec4(0.4f,  1.0f,  0.4f,  1.0f);
+static const glm::vec4 blue_color         = glm::vec4(0.3f,  0.3f,  1.0f,  1.0f);
+static const glm::vec4 magenta_color      = glm::vec4(0.9f,  0.3f,  1.0f,  1.0f);
 static const glm::vec4 primary_bg_color   = glm::vec4(0.35f, 0.35f, 0.37f, 1.0f);
-static const glm::vec4 primary_fg_color   = glm::vec4(0.3f, 0.5f, 0.8f, 0.0f);
-static const glm::vec4 secondary_fg_color = glm::vec4(0.46f, 0.72f, 1.0f, 0.0f);
+static const glm::vec4 primary_fg_color   = glm::vec4(0.3f,  0.5f,  0.8f,  0.0f);
+static const glm::vec4 secondary_fg_color = glm::vec4(0.46f, 0.72f, 1.0f,  0.0f);
 
 static bool is_running = true;
 
