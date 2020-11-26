@@ -204,10 +204,10 @@ split_triangle_at_edge(Triangulation* triangulation,
     node->children[1] = n2;
     node->children_count = 2;
 
-    t1->v[0] = pv_index; t1->v[1] = t->v[right];    t1->v[2] = t->v[opposite];
-    t2->v[0] = pv_index; t2->v[1] = t->v[opposite]; t2->v[2] = t->v[left];
-    t1->n[0] = t->n[left]; t1->n[1] = t->n[right]; t1->n[2] = t2;
-    t2->n[0] = t->n[left]; t2->n[1] = t1; t2->n[2] = t->n[opposite];
+    t1->v[0] = pv_index;       t1->v[1] = t->v[right];    t1->v[2] = t->v[opposite];
+    t2->v[0] = pv_index;       t2->v[1] = t->v[opposite]; t2->v[2] = t->v[left];
+    t1->n[0] = t->n[left]; t1->n[1] = t->n[right];    t1->n[2] = t2;
+    t2->n[0] = t1;         t2->n[1] = t->n[opposite]; t2->n[2] = t->n[left];
     n1->ray = triangulation->vertices[t->v[right]].pos;
     n2->ray = triangulation->vertices[t->v[opposite]].pos;
 
@@ -262,14 +262,14 @@ split_triangle_at_edge(Triangulation* triangulation,
 
         t3->v[0] = pv_index; t3->v[1] = t->v[right];    t3->v[2] = t->v[opposite];
         t4->v[0] = pv_index; t4->v[1] = t->v[opposite]; t4->v[2] = t->v[left];
-        t3->n[0] = t2; t3->n[1] = t->n[right]; t3->n[2] = t4;
-        t4->n[0] = t1; t4->n[1] = t3; t4->n[2] = t->n[opposite];
+        t3->n[0] = t2; t3->n[1] = t->n[right];    t3->n[2] = t4;
+        t4->n[0] = t3; t4->n[1] = t->n[opposite]; t4->n[2] = t1;
         n3->ray = triangulation->vertices[t->v[right]].pos;
         n4->ray = triangulation->vertices[t->v[opposite]].pos;
 
         // NOTE(alexander): connect first two triangles to these two
         t1->n[0] = t4;
-        t2->n[0] = t3;
+        t2->n[2] = t3;
 
         nt1 = t->n[right];
         nt2 = t->n[opposite];
