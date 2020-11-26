@@ -139,7 +139,7 @@ build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, Triangulation
     return triangulation->root;
 }
 
-static void
+static void // TODO(alexander): check if we are inside the convex hull, or a found triangle?
 point_location(Node* node, glm::vec2 p, std::vector<Node*>* result) {
     if (!node) return;
     if (node->triangle) {
@@ -271,8 +271,8 @@ split_triangle_at_edge(Triangulation* triangulation,
         t1->n[0] = t4;
         t2->n[0] = t3;
 
-        Triangle* nt1 = t->n[right];
-        Triangle* nt2 = t->n[opposite];
+        nt1 = t->n[right];
+        nt2 = t->n[opposite];
         if (nt1) {
             for (int i = 0; i < 3; i++) {
                 if (nt1->n[i] == t) nt1->n[i] = t3;
@@ -377,7 +377,7 @@ split_triangle_at_point(Triangulation* triangulation, glm::vec2 p) {
 
         // NOTE(alexander): removing old triangle, reusing indices for one of the triangles.
         t1->index = t->index;
-        triangulation->indices[t->index] = t1->v[0];
+        triangulation->indices[t->index]     = t1->v[0];
         triangulation->indices[t->index + 1] = t1->v[1];
         triangulation->indices[t->index + 2] = t1->v[2];
         push_back_triangle(triangulation, t2);
@@ -752,6 +752,10 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
                 push_highlight_triangle(triangulation, t, scene->secondary_color);
 
                 if (scene->picking_option == 1) {
+                    if (t->n[0]) push_highlight_triangle(triangulation, t->n[0], scene->colors[0]);
+                    if (t->n[1]) push_highlight_triangle(triangulation, t->n[1], scene->colors[1]);
+                    if (t->n[2]) push_highlight_triangle(triangulation, t->n[2], scene->colors[2]);
+                } else if (scene->picking_option == 2) {
                     std::unordered_set<usize> visited;
                     calculate_extended_picking(triangulation, &visited, scene->secondary_color, t, t->n[0], t);
                     calculate_extended_picking(triangulation, &visited, scene->secondary_color, t, t->n[1], t);
@@ -825,11 +829,9 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     }
 
     ImGui::Text("Picking options:");
-    if (ImGui::RadioButton("Default picking", &scene->picking_option, 0)) {
-        if (scene->coloring_option == 1) calculate_distance_coloring(scene);
-        else set_solid_color(scene->primary_color);
-    }
-    ImGui::RadioButton("Extended picking", &scene->picking_option, 1);
+    ImGui::RadioButton("Default picking", &scene->picking_option, 0);
+    ImGui::RadioButton("Default picking + neighbors", &scene->picking_option, 1);
+    ImGui::RadioButton("Extended picking", &scene->picking_option, 2);
     
     ImGui::Text("Coloring options:");
     if (ImGui::RadioButton("Solid color", &scene->coloring_option, 0)) {
