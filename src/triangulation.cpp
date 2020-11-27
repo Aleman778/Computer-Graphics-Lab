@@ -139,11 +139,20 @@ build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, Triangulation
     return triangulation->root;
 }
 
-static void // TODO(alexander): check if we are inside the convex hull, or a found triangle?
-point_location(Node* node, glm::vec2 p, std::vector<Node*>* result) {
+static void
+point_location(Node* node, glm::vec2 p, std::vector<Node*>* result, std::vector<Vertex>* vertices) {
     if (!node) return;
     if (node->triangle) {
-        result->push_back(node);
+        // Make sure p is actual inside the triangle
+        Triangle* t = node->triangle;
+        glm::vec2 v0 = (*vertices)[t->v[0]].pos;
+        glm::vec2 v1 = (*vertices)[t->v[1]].pos;
+        glm::vec2 v2 = (*vertices)[t->v[2]].pos;
+        if (triangle_area(v0, v1, p) <= 0 &&
+            triangle_area(v1, v2, p) <= 0 &&
+            triangle_area(v2, v0, p) <= 0) {
+            result->push_back(node);
+        }
         return;
     }
     if (node->children_count <= 1) return;
@@ -153,12 +162,11 @@ point_location(Node* node, glm::vec2 p, std::vector<Node*>* result) {
     if (node->children_count == 2) {
         f32 d0 = triangle_area(origin, p, node->children[0]->ray);
         f32 d1 = triangle_area(origin, p, node->children[1]->ray);
-        f32 area = triangle_area(origin, p, node->children[1]->ray);
         if (d0 >= 0 && d1 <= 0) {
-            point_location(node->children[0], p, result);
+            point_location(node->children[0], p, result, vertices);
         }
         if (d1 >= 0) {
-            point_location(node->children[1], p, result);
+            point_location(node->children[1], p, result, vertices);
         }
 
     } else if (node->children_count == 3) {
@@ -166,13 +174,13 @@ point_location(Node* node, glm::vec2 p, std::vector<Node*>* result) {
         f32 d1 = triangle_area(origin, p, node->children[1]->ray);
         f32 d2 = triangle_area(origin, p, node->children[2]->ray);
         if (d0 >= 0 && d1 <= 0) {
-            point_location(node->children[0], p, result);
+            point_location(node->children[0], p, result, vertices);
         }
         if (d1 >= 0 && d2 <= 0) {
-            point_location(node->children[1], p, result);
+            point_location(node->children[1], p, result, vertices);
         }
         if (d2 >= 0 && d0 <= 0) {
-            point_location(node->children[2], p, result);
+            point_location(node->children[2], p, result, vertices);
         }
     }
 }
@@ -298,7 +306,7 @@ split_triangle_at_edge(Triangulation* triangulation,
 static void
 split_triangle_at_point(Triangulation* triangulation, glm::vec2 p) {
     std::vector<Node*> nodes;
-    point_location(triangulation->root, p, &nodes);
+    point_location(triangulation->root, p, &nodes, &triangulation->vertices);
     if (nodes.size() == 0) return;
     Node* node = nodes[0];
     Node* neighbor = NULL;
@@ -507,7 +515,8 @@ initialize_scene(Triangulation_Scene* scene) {
     scene->colors[3] = magenta_color;
 
     // Setup default settings
-    scene->coloring_option = 0; // Default
+    scene->picking_option = 0; // Default Picking
+    scene->coloring_option = 0; // Solid Color
     scene->is_initialized = true;
 
     return true;
@@ -739,8 +748,8 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         } else {
             // Point location color selected node
             std::vector<Node*> nodes;
-            point_location(triangulation->root, glm::vec2(x, y), &nodes);
-            if (nodes.size() >= 0) {
+            point_location(triangulation->root, glm::vec2(x, y), &nodes, &triangulation->vertices);
+            if (nodes.size() > 0) {
                 Node* node = nodes[0];
                 Triangle* t = node->triangle;
 
