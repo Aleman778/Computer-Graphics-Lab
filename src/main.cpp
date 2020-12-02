@@ -1,78 +1,8 @@
-#include <cstdio>
-#include <cstdint>
-#include <ctime>
-#include <cmath>
-#include <cassert>
-
-#include <string>
-#include <vector>
-#include <random>
-#include <functional>
-#include <unordered_set>
-#include <unordered_map>
-
-#include <glm.hpp>
-#include <gtx/hash.hpp>
-#include <gtc/constants.hpp>
-#include <gtc/matrix_transform.hpp>
-#include <gtx/matrix_transform_2d.hpp>
-#include <gtc/type_ptr.hpp>
-
-#include <GL/glew.h>
-
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-
-#include <imgui.h>
-#include "imgui_impl_glfw_gl3.h"
-
-typedef unsigned int uint;
-typedef  int8_t   i8;
-typedef uint8_t   u8;
-typedef  int16_t  i16;
-typedef uint16_t  u16;
-typedef  int32_t  i32;
-typedef uint32_t  u32;
-typedef  int64_t  i64;
-typedef uint64_t  u64;
-typedef ptrdiff_t isize;
-typedef size_t    usize;
-typedef float     f32;
-typedef double    f64;
-
-static const glm::vec4 red_color          = glm::vec4(1.0f,  0.4f,  0.4f,  1.0f);
-static const glm::vec4 green_color        = glm::vec4(0.4f,  1.0f,  0.4f,  1.0f);
-static const glm::vec4 blue_color         = glm::vec4(0.3f,  0.3f,  1.0f,  1.0f);
-static const glm::vec4 magenta_color      = glm::vec4(0.9f,  0.3f,  1.0f,  1.0f);
-static const glm::vec4 primary_bg_color   = glm::vec4(0.35f, 0.35f, 0.37f, 1.0f);
-static const glm::vec4 primary_fg_color   = glm::vec4(0.3f,  0.5f,  0.8f,  0.0f);
-static const glm::vec4 secondary_fg_color = glm::vec4(0.46f, 0.72f, 1.0f,  0.0f);
-
-static bool is_running = true;
-
-enum Scene_Type {
-    Scene_Koch_Snowflake,
-    Scene_Triangulation,
-};
-
-struct Button_State {
-    int half_transition_count;
-    bool ended_down;
-};
-
-struct Input {
-    f32 mouse_x;
-    f32 mouse_y;
-    f32 mouse_scroll_x;
-    f32 mouse_scroll_y;
-    Button_State left_mb;
-    Button_State right_mb;
-    Button_State middle_mb;
-
-    Button_State alt_key;
-    Button_State shift_key;
-    Button_State control_key;
-};
+#include "main.h"
+#include "renderer.cpp"
+#include "koch_snowflake.cpp"
+#include "triangulation.cpp"
+#include "basic_3d_graphics.cpp"
 
 bool
 was_pressed(Button_State* state) {
@@ -80,97 +10,21 @@ was_pressed(Button_State* state) {
         (state->half_transition_count == 1 && state->ended_down);
 }
 
-struct Window {
-    i32 width;
-    i32 height;
-    Input input;
-};
 
-struct Camera2D {
-    f32 offset_x;
-    f32 offset_y;
-    f32 x;
-    f32 y;
-    f32 zoom;
-};
+// LINK: https://stackoverflow.com/questions/2602013/read-whole-ascii-file-into-c-stdstring
+std::string
+read_entire_file_to_string(const char* filepath) {
+    std::ifstream t(filepath);
+    std::string str;
 
-void
-update_camera_2d(Window* window, Camera2D* camera) {
-    // Camera panning
-    if (window->input.right_mb.ended_down) {
-        camera->x -= (camera->offset_x - window->input.mouse_x)/(camera->zoom + 1.0f);
-        camera->y -= (camera->offset_y - window->input.mouse_y)/(camera->zoom + 1.0f);
-    }
-    camera->offset_x = window->input.mouse_x;
-    camera->offset_y = window->input.mouse_y;
+    t.seekg(0, std::ios::end);   
+    str.reserve(t.tellg());
+    t.seekg(0, std::ios::beg);
 
-    // Camera zooming
-    f32 prev_mouse_x = window->input.mouse_x/(camera->zoom + 1.0f);
-    f32 prev_mouse_y = window->input.mouse_y/(camera->zoom + 1.0f);
-    camera->zoom += (camera->zoom + 1.0f)*window->input.mouse_scroll_y*0.15f;
-    if (camera->zoom < -0.98f) { // NOTE(alexander): prevent zoom increment from going to zero
-        camera->zoom = -0.98f;
-    }
-    if (camera->zoom > 10.0f) { // NOTE(alexander): maximum zoom level
-        camera->zoom = 10.0f;
-    }
-    camera->x += (window->input.mouse_x/(camera->zoom + 1.0f) - prev_mouse_x);
-    camera->y += (window->input.mouse_y/(camera->zoom + 1.0f) - prev_mouse_y);
+    str.assign((std::istreambuf_iterator<char>(t)),
+               std::istreambuf_iterator<char>());
+    return str;
 }
-
-GLuint
-load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_shader) {
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    GLint length = (GLint) std::strlen(vertex_shader);
-    glShaderSource(vs, 1, &vertex_shader, &length);
-    glCompileShader(vs);
-    GLint log_length;
-    glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetShaderInfoLog(vs, log_length, NULL, buf);
-        printf("[OpenGL] Vertex shader compilation error: %s", buf);
-        delete[] buf;
-        return false;
-    }
-
-    // Setup fragment shader
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    length = (GLint) std::strlen(fragment_shader);
-    glShaderSource(fs, 1, &fragment_shader, &length);
-    glCompileShader(fs);
-    glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetShaderInfoLog(fs, log_length, NULL, buf);
-        printf("[OpenGL] Fragment shader compilation error: %s", buf);
-        delete[] buf;
-        return false;
-    }
-
-    // Create shader program
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vs);
-    glAttachShader(program, fs);
-    glLinkProgram(program);
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_length);
-    if (log_length > 0) {
-        GLchar* buf = new GLchar[log_length];
-        glGetProgramInfoLog(program, log_length, NULL, buf);
-        printf("[OpenGL] Program link error: %s", buf);
-        delete[] buf;
-        return false;
-    }
-
-    // Delete vertex and fragment shaders, no longer needed
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    return program;
-}
-
-#include "koch_snowflake.cpp"
-#include "triangulation.cpp"
 
 void
 opengl_debug_callback(GLenum source,
@@ -352,7 +206,8 @@ main() {
 
     Koch_Snowflake_Scene koch_snowflake_scene = {};
     Triangulation_Scene triangulation_scene = {};
-    Scene_Type current_scene_type = Scene_Triangulation;
+    Basic_3D_Graphics_Scene basic_3d_graphics_scene = {};
+    Scene_Type current_scene_type = Scene_Basic_3D_Graphics;
 
     // Setup ImGui
     ImGui::CreateContext();
@@ -372,6 +227,7 @@ main() {
             if (ImGui::BeginMenu("Labs", labs_enabled)) {
                 if (ImGui::MenuItem("Lab 1 - Koch Snowflake")) current_scene_type = Scene_Koch_Snowflake;
                 if (ImGui::MenuItem("Lab 2 - Triangulation"))  current_scene_type = Scene_Triangulation;
+                if (ImGui::MenuItem("Lab 2 - Basic 3D Graphics"))  current_scene_type = Scene_Triangulation;
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -383,6 +239,10 @@ main() {
                     
                 case Scene_Triangulation: {
                     update_and_render_scene(&triangulation_scene, &window);
+                } break;
+
+                case Scene_Basic_3D_Graphics: {
+                    update_and_render_scene(&basic_3d_graphics_scene, &window);
                 } break;
 
                 default: { // NOTE(alexander): invalid scene, just render background

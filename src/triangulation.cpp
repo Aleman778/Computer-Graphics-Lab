@@ -1,4 +1,9 @@
 
+/***************************************************************************
+ * Lab assignment 2 - Alexander Mennborg
+ * Triangulation
+ ***************************************************************************/
+
 struct Triangle {
     uint v[3]; // vertex indices to each edge
     Triangle* n[3]; // neighboring triangles
@@ -711,7 +716,11 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     Triangulation* triangulation = &scene->triangulation;
 
     // Setup orthographic projection and camera transform
-    update_camera_2d(window, &scene->camera);
+    update_camera_2d(&scene->camera,
+                     window->input.mouse_x,
+                     window->input.mouse_y,
+                     window->input.mouse_scroll_y,
+                     window->input.right_mb.ended_down);
     glm::mat4 transform = glm::ortho(0.0f, (f32) window->width, (f32) window->height, 0.0f, 0.0f, 1000.0f);
     transform = glm::scale(transform, glm::vec3(scene->camera.zoom + 1.0f, scene->camera.zoom + 1.0f, 0));
     transform = glm::translate(transform, glm::vec3(scene->camera.x, scene->camera.y, 0));
