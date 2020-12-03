@@ -1,16 +1,17 @@
 
 Mesh
 create_cube_mesh(glm::vec3 c, glm::vec3 d) {
+    d.x /= 2.0f; d.y /= 2.0f; d.z /= 2.0f;
     static const GLsizei vertex_count = 8;
     static const float vertices[] = {
         c.x - d.x, c.y - d.y, c.z - d.z,
         c.x + d.x, c.y - d.y, c.z - d.z,
-        c.x - d.x, c.y + d.y, c.z - d.z,
         c.x + d.x, c.y + d.y, c.z - d.z,
+        c.x - d.x, c.y + d.y, c.z - d.z,
         c.x - d.x, c.y - d.y, c.z + d.z,
         c.x + d.x, c.y - d.y, c.z + d.z,
-        c.x - d.x, c.y + d.y, c.z + d.z,
         c.x + d.x, c.y + d.y, c.z + d.z,
+        c.x - d.x, c.y + d.y, c.z + d.z,
     };
 
     static const GLsizei index_count = 36;
@@ -19,11 +20,12 @@ create_cube_mesh(glm::vec3 c, glm::vec3 d) {
         4, 0, 3, 4, 3, 7, // Left
         1, 5, 6, 1, 6, 2, // Right
         3, 2, 6, 3, 6, 7, // Top
-        0, 1, 5, 0, 5, 3, // Bottom
-        5, 6, 7, 5, 7, 6, // Back
+        0, 1, 5, 0, 5, 4, // Bottom
+        5, 4, 7, 5, 7, 6, // Back
     };
 
     Mesh mesh = {};
+    mesh.count = index_count;
     
     // Create vertex array object
     glGenVertexArrays(1, &mesh.vao);
@@ -41,8 +43,10 @@ create_cube_mesh(glm::vec3 c, glm::vec3 d) {
 
     // Setup vertex attributes
     glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(f32)*3, 0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindVertexArray(0);
+    glDisableVertexAttribArray(0);
     return mesh;
 }
 

@@ -66,25 +66,52 @@ void
 window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, int mods) {
     if (action == GLFW_REPEAT) return; // NOTE(alexander): don't care about repeat, breaks my input system!
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
+    Button_State* state = NULL;
+    
     switch (key) {
         case GLFW_KEY_LEFT_ALT: 
         case GLFW_KEY_RIGHT_ALT: {
-            window->input.alt_key.ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
-            window->input.alt_key.half_transition_count++;
+            state = &window->input.alt_key;
         } break;
             
         case GLFW_KEY_LEFT_SHIFT: 
         case GLFW_KEY_RIGHT_SHIFT: {
-            window->input.shift_key.ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
-            window->input.shift_key.half_transition_count++;
+            state = &window->input.alt_key;
         } break;
             
         case GLFW_KEY_LEFT_CONTROL: 
         case GLFW_KEY_RIGHT_CONTROL: {
-            window->input.control_key.ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
-            window->input.control_key.half_transition_count++;
+            state = &window->input.control_key;
         } break;
 
+        case GLFW_KEY_W: {
+            state = &window->input.w_key;
+        } break;
+ 
+        case GLFW_KEY_A: {
+            state = &window->input.a_key;
+        } break;
+ 
+        case GLFW_KEY_S: {
+            state = &window->input.s_key;
+        } break;
+ 
+        case GLFW_KEY_D: {
+            state = &window->input.d_key;
+        } break;
+ 
+        case GLFW_KEY_E: {
+            state = &window->input.e_key;
+        } break;
+ 
+        case GLFW_KEY_C: {
+            state = &window->input.c_key;
+        } break;
+    }
+    
+    if (state) {
+        state->ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
+        state->half_transition_count++;
     }
 }
 
@@ -255,12 +282,21 @@ main() {
         
         ImGui::Render();
 
-        // reset input states mouse scroll
+        // reset input states and mouse scroll
         window.input.mouse_scroll_x = 0;
         window.input.mouse_scroll_y = 0;
         window.input.left_mb.half_transition_count = 0;
         window.input.right_mb.half_transition_count = 0;
         window.input.middle_mb.half_transition_count = 0;
+        window.input.alt_key.half_transition_count = 0;
+        window.input.shift_key.half_transition_count = 0;
+        window.input.control_key.half_transition_count = 0;
+        window.input.w_key.half_transition_count = 0;
+        window.input.a_key.half_transition_count = 0;
+        window.input.s_key.half_transition_count = 0;
+        window.input.d_key.half_transition_count = 0;
+        window.input.e_key.half_transition_count = 0;
+        window.input.c_key.half_transition_count = 0;
         
         glfwSwapBuffers(glfw_window);
         glfwPollEvents();

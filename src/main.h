@@ -72,6 +72,13 @@ struct Input {
     Button_State right_mb;
     Button_State middle_mb;
 
+    Button_State w_key;
+    Button_State a_key;
+    Button_State s_key;
+    Button_State d_key;
+    Button_State e_key;
+    Button_State c_key;
+
     Button_State alt_key;
     Button_State shift_key;
     Button_State control_key;

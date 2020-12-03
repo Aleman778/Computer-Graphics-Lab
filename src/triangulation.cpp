@@ -477,26 +477,29 @@ initialize_scene(Triangulation_Scene* scene) {
 
     // Done with vertex array
     glBindVertexArray(0);
+ 
+    const char* vert_shader_source = R"vs(
+#version 330
+layout(location=0) in vec2 pos;
+layout(location=1) in vec4 color;
+out vec4 out_color;
+uniform mat4 transform;
 
-    const char* vert_shader_source =
-        "#version 330\n"
-        "layout(location=0) in vec2 pos;\n"
-        "layout(location=1) in vec4 color;\n"
-        "out vec4 out_color;\n"
-        "uniform mat4 transform;\n"
-        "void main() {\n"
-        "    gl_Position = transform * vec4(pos, 0.0f, 1.0f);\n"
-        "    out_color = color;\n"
-        "}\n";
+void main() {
+    gl_Position = transform * vec4(pos, 0.0f, 1.0f);
+    out_color = color;
+}
+)vs";
 
-    const char* frag_shader_source =
-        "#version 330\n"
-        "in  vec4 out_color;"
-        "out vec4 frag_color;\n"
-        "uniform vec4 tint_color;\n"
-        "void main() {\n"
-        "    frag_color = out_color*tint_color;\n"
-        "}\n";
+    const char* frag_shader_source = R"fs(
+#version 330
+in  vec4 out_color;
+out vec4 frag_color;
+uniform vec4 tint_color;
+void main() {
+    frag_color = out_color*tint_color;
+}
+)fs";
 
     scene->shader = load_glsl_shader_from_sources(vert_shader_source, frag_shader_source);
     scene->tint_color_uniform = glGetUniformLocation(scene->shader, "tint_color");

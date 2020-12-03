@@ -3,6 +3,7 @@ struct Mesh {
     GLuint vbo;
     GLuint ibo;
     GLuint vao;
+    GLsizei count;
 };
 
 struct Camera2D {
