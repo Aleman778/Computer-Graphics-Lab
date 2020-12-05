@@ -10,22 +10,6 @@ was_pressed(Button_State* state) {
         (state->half_transition_count == 1 && state->ended_down);
 }
 
-
-// LINK: https://stackoverflow.com/questions/2602013/read-whole-ascii-file-into-c-stdstring
-std::string
-read_entire_file_to_string(const char* filepath) {
-    std::ifstream t(filepath);
-    std::string str;
-
-    t.seekg(0, std::ios::end);   
-    str.reserve(t.tellg());
-    t.seekg(0, std::ios::beg);
-
-    str.assign((std::istreambuf_iterator<char>(t)),
-               std::istreambuf_iterator<char>());
-    return str;
-}
-
 void
 opengl_debug_callback(GLenum source,
                       GLenum type,
@@ -231,9 +215,9 @@ main() {
     glfwSetScrollCallback(glfw_window,      window_scroll_callback);
     glfwSetWindowSizeCallback(glfw_window,  window_size_callback);
 
-    Koch_Snowflake_Scene koch_snowflake_scene = {};
-    Triangulation_Scene triangulation_scene = {};
-    Basic_3D_Graphics_Scene basic_3d_graphics_scene = {};
+    auto koch_snowflake_scene = new Koch_Snowflake_Scene();
+    auto triangulation_scene = new Triangulation_Scene();
+    auto basic_3d_graphics_scene = new Basic_3D_Graphics_Scene(); // may be big 
     Scene_Type current_scene_type = Scene_Basic_3D_Graphics;
 
     // Setup ImGui
@@ -253,23 +237,23 @@ main() {
             static bool labs_enabled = true;
             if (ImGui::BeginMenu("Labs", labs_enabled)) {
                 if (ImGui::MenuItem("Lab 1 - Koch Snowflake")) current_scene_type = Scene_Koch_Snowflake;
-                if (ImGui::MenuItem("Lab 2 - Triangulation"))  current_scene_type = Scene_Triangulation;
-                if (ImGui::MenuItem("Lab 2 - Basic 3D Graphics"))  current_scene_type = Scene_Triangulation;
+                if (ImGui::MenuItem("Lab 2 - Triangulation")) current_scene_type = Scene_Triangulation;
+                if (ImGui::MenuItem("Lab 3 - Basic 3D Graphics")) current_scene_type = Scene_Basic_3D_Graphics;
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
 
             switch (current_scene_type) {
                 case Scene_Koch_Snowflake: {
-                    update_and_render_scene(&koch_snowflake_scene, &window);
+                    update_and_render_scene(koch_snowflake_scene, &window);
                 } break;
                     
                 case Scene_Triangulation: {
-                    update_and_render_scene(&triangulation_scene, &window);
+                    update_and_render_scene(triangulation_scene, &window);
                 } break;
 
                 case Scene_Basic_3D_Graphics: {
-                    update_and_render_scene(&basic_3d_graphics_scene, &window);
+                    update_and_render_scene(basic_3d_graphics_scene, &window);
                 } break;
 
                 default: { // NOTE(alexander): invalid scene, just render background

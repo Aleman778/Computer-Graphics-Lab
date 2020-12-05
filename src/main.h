@@ -18,6 +18,7 @@
 #include <gtc/constants.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <gtx/matrix_transform_2d.hpp>
+#include <gtx/quaternion.hpp>
 #include <gtc/type_ptr.hpp>
 
 #include <GL/glew.h>
@@ -27,6 +28,8 @@
 
 #include <imgui.h>
 #include "imgui_impl_glfw_gl3.h"
+
+#define array_count(array) (sizeof(array)/sizeof((array)[0]))
 
 typedef unsigned int uint;
 typedef  int8_t   i8;
@@ -93,8 +96,6 @@ struct Window {
 #include "renderer.h"
 
 bool was_pressed(Button_State* state);
-
-std::string read_entire_file_to_string(const char* filepath);
 
 void opengl_debug_callback(GLenum source,
                            GLenum type,

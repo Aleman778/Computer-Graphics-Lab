@@ -26,7 +26,7 @@ create_cube_mesh(glm::vec3 c, glm::vec3 d) {
 
     Mesh mesh = {};
     mesh.count = index_count;
-    
+
     // Create vertex array object
     glGenVertexArrays(1, &mesh.vao);
     glBindVertexArray(mesh.vao);
@@ -45,9 +45,64 @@ create_cube_mesh(glm::vec3 c, glm::vec3 d) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
+    // Reset state
     glBindVertexArray(0);
     glDisableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glDisableVertexAttribArray(0);
     return mesh;
+}
+
+void
+initialize_transform(Transform* transform, glm::vec3 pos, glm::quat rot, glm::vec3 scale) {
+    transform->local_position = pos;
+    transform->local_rotation = rot;
+    transform->local_scale    = scale;
+    transform->is_dirty       = true; // make sure to update matrix!
+}
+
+void
+update_transform(Transform* transform) {
+    if (transform->is_dirty) {
+        transform->matrix = glm::translate(glm::mat4(1.0f), transform->local_position);
+        transform->matrix = transform->matrix * glm::toMat4(transform->local_rotation);
+        transform->matrix = glm::scale(transform->matrix,   transform->local_scale);
+        transform->is_dirty = false;
+    }
+}
+
+void
+initialize_camera_3d(Camera3D* camera, f32 near, f32 far, f32 aspect_ratio) {
+    camera->near = near;
+    camera->far = far;
+    camera->aspect_ratio = aspect_ratio;
+    initialize_transform(&camera->transform);
+    camera->is_dirty = true;
+}
+
+void
+update_camera_3d(Camera3D* camera, f32 aspect_ratio) {
+    if (camera->aspect_ratio != aspect_ratio) {
+        camera->aspect_ratio = aspect_ratio;
+        camera->is_dirty = true;
+    }
+
+    bool is_transform_dirty = camera->transform.is_dirty;
+    update_transform(&camera->transform);
+
+    if (camera->is_dirty) {
+        camera->perspective_matrix = glm::perspective(90.0f,
+                                                      camera->aspect_ratio,
+                                                      camera->near,
+                                                      camera->far);
+    }
+
+    if (is_transform_dirty || camera->is_dirty) {
+        camera->combined_matrix = camera->perspective_matrix * camera->transform.matrix;
+    }
+    
+    camera->is_dirty = false;
 }
 
 void
@@ -72,6 +127,28 @@ update_camera_2d(Camera2D* camera, f32 mouse_x, f32 mouse_y, f32 zoom, bool pan)
     }
     camera->x += (mouse_x/(camera->zoom + 1.0f) - prev_mouse_x);
     camera->y += (mouse_y/(camera->zoom + 1.0f) - prev_mouse_y);
+}
+
+void
+begin_3d_scene(const glm::vec4& clear_color, const glm::vec4& viewport) {
+    // Enable depth testing
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+
+    // Set viewport
+    glViewport(viewport.x, viewport.y, viewport.z, viewport.w);
+
+    // Render and clear background
+    glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void
+end_3d_scene() {
+    // Resetting opengl the state
+    glUseProgram(0);
+    glBindVertexArray(0);
+    glDisable(GL_DEPTH_TEST);
 }
 
 GLuint
@@ -125,30 +202,41 @@ load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_sh
     return program;
 }
 
-GLuint
-load_glsl_shader_from_file(const char* filepath) {
-    std::string contents = read_entire_file_to_string(filepath);
-    std::string vertex_source;
-    std::string fragment_source;
+Basic_Material
+compile_basic_material_shader() {
+    const char* vertex_code = R"(
+#version 330
 
-    usize index = contents.find("#shader ", 0);
-    while (index != std::string::npos) {
-        if (index != std::string::npos) {
-            usize beg;
-            if ((beg = contents.find("GL_VERTEX_SHADER", index)) != std::string::npos) {
-                beg += 17;
-                index = contents.find("#shader ", beg);
-                vertex_source = contents.substr(beg, index);
-            } else if ((beg = contents.find("GL_FRAGMENT_SHADER", index)) != std::string::npos) {
-                beg += 19;
-                index = contents.find("#shader ", beg);
-                fragment_source = contents.substr(beg, index);
-            } else {
-                printf("Failed to parse shader file, expected shader type");
-                return 0;
-            }
-        }
-    }
+layout(location=0) in vec3 pos;
+out float illumination_amount;
+uniform mat4 transform;
+uniform float light_attenuation;
+uniform float light_intensity;
 
-    return load_glsl_shader_from_sources(vertex_source.c_str(), fragment_source.c_str());
+void main() {
+    vec4 world_pos = transform * vec4(pos, 1.0f);
+    illumination_amount = log(light_attenuation/length(world_pos) - 0.2f)*light_intensity;
+    gl_Position = world_pos;
+}
+)";
+
+    const char* fragment_code = R"(
+#version 330
+
+out vec4 frag_color;
+in float illumination_amount;
+uniform vec4 color;
+
+void main() {
+    frag_color = color*illumination_amount;
+}
+)";
+
+    Basic_Material mat = {};
+    mat.shader = load_glsl_shader_from_sources(vertex_code, fragment_code);
+    mat.u_transform = glGetUniformLocation(mat.shader, "transform");
+    mat.u_color = glGetUniformLocation(mat.shader, "color");
+    mat.u_light_intensity = glGetUniformLocation(mat.shader, "light_intensity");
+    mat.u_light_attenuation = glGetUniformLocation(mat.shader, "light_attenuation");
+    return mat;
 }
