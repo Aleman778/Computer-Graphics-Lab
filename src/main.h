@@ -16,6 +16,7 @@
 #include <glm.hpp>
 #include <gtx/hash.hpp>
 #include <gtc/constants.hpp>
+#include <gtx/string_cast.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <gtx/matrix_transform_2d.hpp>
 #include <gtx/quaternion.hpp>

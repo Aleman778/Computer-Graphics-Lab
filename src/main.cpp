@@ -60,7 +60,7 @@ window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, 
             
         case GLFW_KEY_LEFT_SHIFT: 
         case GLFW_KEY_RIGHT_SHIFT: {
-            state = &window->input.alt_key;
+            state = &window->input.shift_key;
         } break;
             
         case GLFW_KEY_LEFT_CONTROL: 

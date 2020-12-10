@@ -55,6 +55,19 @@ create_cube_mesh(glm::vec3 c, glm::vec3 d) {
 }
 
 void
+apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation) {
+    glUseProgram(shader->program);
+    glUniform1f(shader->u_light_attenuation, light_attenuation);
+    glUniform1f(shader->u_light_intensity, light_intensity);
+}
+
+void
+update_basic_material(Basic_Material* material, const glm::mat4& transform) {
+    glUniform4fv(material->shader->u_color, 1, glm::value_ptr(material->color));
+    glUniformMatrix4fv(material->shader->u_transform, 1, GL_FALSE, glm::value_ptr(transform));
+}
+
+void
 initialize_transform(Transform* transform, glm::vec3 pos, glm::quat rot, glm::vec3 scale) {
     transform->local_position = pos;
     transform->local_rotation = rot;
@@ -65,11 +78,21 @@ initialize_transform(Transform* transform, glm::vec3 pos, glm::quat rot, glm::ve
 void
 update_transform(Transform* transform) {
     if (transform->is_dirty) {
-        transform->matrix = glm::translate(glm::mat4(1.0f), transform->local_position);
-        transform->matrix = transform->matrix * glm::toMat4(transform->local_rotation);
-        transform->matrix = glm::scale(transform->matrix,   transform->local_scale);
+        glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform->local_position);
+        glm::mat4 rotation = glm::toMat4(transform->local_rotation);
+        glm::mat4 scale = glm::scale(glm::mat4(1.0f), transform->local_scale);
+        transform->matrix = translation * rotation * scale;
         transform->is_dirty = false;
     }
+}
+
+void
+draw_graphics_node(Graphics_Node* node, Camera3D* camera) {
+    glBindVertexArray(node->mesh->vao);
+    update_transform(&node->transform);
+    glm::mat4 transform = camera->combined_matrix * node->transform.matrix;
+    update_basic_material(&node->material, transform);
+    glDrawElements(GL_TRIANGLES, node->mesh->count, GL_UNSIGNED_INT, 0);
 }
 
 void
@@ -136,7 +159,7 @@ begin_3d_scene(const glm::vec4& clear_color, const glm::vec4& viewport) {
     glDepthFunc(GL_LESS);
 
     // Set viewport
-    glViewport(viewport.x, viewport.y, viewport.z, viewport.w);
+    glViewport((GLsizei) viewport.x, (GLsizei) viewport.y, (GLsizei) viewport.z, (GLsizei) viewport.w);
 
     // Render and clear background
     glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
@@ -202,7 +225,7 @@ load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_sh
     return program;
 }
 
-Basic_Material
+Basic_Shader
 compile_basic_material_shader() {
     const char* vertex_code = R"(
 #version 330
@@ -215,7 +238,7 @@ uniform float light_intensity;
 
 void main() {
     vec4 world_pos = transform * vec4(pos, 1.0f);
-    illumination_amount = log(light_attenuation/length(world_pos) - 0.2f)*light_intensity;
+    illumination_amount = log(1.0f/(length(world_pos)*light_attenuation))*light_intensity;
     gl_Position = world_pos;
 }
 )";
@@ -232,11 +255,11 @@ void main() {
 }
 )";
 
-    Basic_Material mat = {};
-    mat.shader = load_glsl_shader_from_sources(vertex_code, fragment_code);
-    mat.u_transform = glGetUniformLocation(mat.shader, "transform");
-    mat.u_color = glGetUniformLocation(mat.shader, "color");
-    mat.u_light_intensity = glGetUniformLocation(mat.shader, "light_intensity");
-    mat.u_light_attenuation = glGetUniformLocation(mat.shader, "light_attenuation");
-    return mat;
+    Basic_Shader shader = {};
+    shader.program = load_glsl_shader_from_sources(vertex_code, fragment_code);
+    shader.u_transform = glGetUniformLocation(shader.program, "transform");
+    shader.u_color = glGetUniformLocation(shader.program, "color");
+    shader.u_light_intensity = glGetUniformLocation(shader.program, "light_intensity");
+    shader.u_light_attenuation = glGetUniformLocation(shader.program, "light_attenuation");
+    return shader;
 }
