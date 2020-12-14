@@ -30,8 +30,8 @@ SET_PROPERTY(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS GLEW_STATIC)
 ADD_SUBDIRECTORY(vendor)
 
 PROJECT(lab)
-FILE(GLOB lab_headers src/*.h)
-FILE(GLOB lab_sources src/*.cpp)
+FILE(GLOB lab_sources src/main.cpp)
+
 
 SET(files_lab ${lab_headers} ${lab_sources})
 SOURCE_GROUP("lab" FILES ${files_lab})
