@@ -1,8 +1,10 @@
 #include "main.h"
+#include "geometry.cpp"
 #include "renderer.cpp"
-#include "koch_snowflake.cpp"
-#include "triangulation.cpp"
-#include "basic_3d_graphics.cpp"
+#include "koch_snowflake.cpp"    // Lab 1
+#include "triangulation.cpp"     // Lab 2
+#include "basic_3d_graphics.cpp" // Lab 3
+#include "simple_world.cpp"      // Lab 4
 
 bool
 was_pressed(Button_State* state) {
@@ -158,6 +160,21 @@ window_size_callback(GLFWwindow* glfw_window, i32 width, i32 height) {
     }
 }
 
+// LINK: https://stackoverflow.com/questions/2602013/read-whole-ascii-file-into-c-stdstring
+std::string
+read_entire_file_to_string(std::string filepath) {
+    std::ifstream t(filepath);
+    std::string str;
+
+    t.seekg(0, std::ios::end);   
+    str.reserve(t.tellg());
+    t.seekg(0, std::ios::beg);
+
+    str.assign((std::istreambuf_iterator<char>(t)),
+               std::istreambuf_iterator<char>());
+    return str;
+}
+
 int
 main() {
     if (!glfwInit()) {
@@ -217,8 +234,9 @@ main() {
 
     auto koch_snowflake_scene = new Koch_Snowflake_Scene();
     auto triangulation_scene = new Triangulation_Scene();
-    auto basic_3d_graphics_scene = new Basic_3D_Graphics_Scene(); // may be big 
-    Scene_Type current_scene_type = Scene_Basic_3D_Graphics;
+    auto basic_3d_graphics_scene = new Basic_3D_Graphics_Scene();
+    auto simple_world_scene = new Simple_World_Scene();
+    Scene_Type current_scene_type = Scene_Simple_World;
 
     // Setup ImGui
     ImGui::CreateContext();
@@ -239,6 +257,7 @@ main() {
                 if (ImGui::MenuItem("Lab 1 - Koch Snowflake")) current_scene_type = Scene_Koch_Snowflake;
                 if (ImGui::MenuItem("Lab 2 - Triangulation")) current_scene_type = Scene_Triangulation;
                 if (ImGui::MenuItem("Lab 3 - Basic 3D Graphics")) current_scene_type = Scene_Basic_3D_Graphics;
+                if (ImGui::MenuItem("Lab 4 - Simple World")) current_scene_type = Scene_Simple_World;
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -251,11 +270,15 @@ main() {
                 case Scene_Triangulation: {
                     update_and_render_scene(triangulation_scene, &window);
                 } break;
-
+                
                 case Scene_Basic_3D_Graphics: {
                     update_and_render_scene(basic_3d_graphics_scene, &window);
                 } break;
 
+                case Scene_Simple_World: {
+                    update_and_render_scene(simple_world_scene, &window);
+                } break;
+                    
                 default: { // NOTE(alexander): invalid scene, just render background
                     glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
                     glClear(GL_COLOR_BUFFER_BIT);
@@ -290,4 +313,24 @@ main() {
     ImGui_ImplGlfwGL3_Shutdown();
     glfwTerminate();
     return 0;
+}
+
+// NOTE(alexander): don't expose this to the rest of the codebase!
+#include <sys/types.h>
+#include <sys/stat.h>
+
+const char*
+find_resource_folder() {
+    struct stat info;
+ 
+    if (stat("res", &info) == 0 && info.st_mode & S_IFDIR) {
+        return "res/";
+    }
+
+    if (stat("../res", &info) == 0 && info.st_mode & S_IFDIR) {
+        return "../res/";
+    }
+
+    assert(0 && "Failed to find res folder!");
+    return "";
 }

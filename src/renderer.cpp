@@ -1,9 +1,63 @@
 
 Mesh
-create_cube_mesh(glm::vec3 c, glm::vec3 d) {
-    d.x /= 2.0f; d.y /= 2.0f; d.z /= 2.0f;
-    static const GLsizei vertex_count = 8;
-    static const float vertices[] = {
+generate_mesh_from_data(const float* vertices,
+                        const uint* indices,
+                        Mesh_Layout* layouts,
+                        usize vertex_count,
+                        usize index_count,
+                        int num_layouts) {
+    Mesh mesh = {};
+    if (index_count == 0) {
+        mesh.count = (GLsizei) vertex_count;
+    } else {
+        mesh.count = (GLsizei) index_count;
+    }
+
+    // Create vertex array object
+    glGenVertexArrays(1, &mesh.vao);
+    glBindVertexArray(mesh.vao);
+
+    // Create vertex buffer
+    glGenBuffers(1, &mesh.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_count, vertices, GL_STATIC_DRAW);
+
+    // Create index buffer
+    if (index_count > 0) {
+        glGenBuffers(1, &mesh.ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint)*index_count, indices, GL_STATIC_DRAW);
+    }
+
+    // Setup vertex layouts
+    for (int i = 0; i < num_layouts; i++) {
+        Mesh_Layout* layout = &layouts[i];
+        glEnableVertexAttribArray(layout->location);
+        glVertexAttribPointer(layout->location,
+                              layout->size,
+                              layout->type,
+                              layout->normalized,
+                              layout->stride,
+                              (GLvoid*) layout->offset);
+    }
+
+    // Reset state
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    for (int i = 0; i < num_layouts; i++) {
+        Mesh_Layout* layout = &layouts[i];
+        glDisableVertexAttribArray(layout->location);
+    }
+
+    return mesh;
+}
+
+// NOTE(alexander): optimized for space, contains only vertex positions!
+Mesh
+create_basic_cuboid_mesh(glm::vec3 c, glm::vec3 d) {
+    const float vertices[] = {
         c.x - d.x, c.y - d.y, c.z - d.z,
         c.x + d.x, c.y - d.y, c.z - d.z,
         c.x + d.x, c.y + d.y, c.z - d.z,
@@ -14,47 +68,92 @@ create_cube_mesh(glm::vec3 c, glm::vec3 d) {
         c.x - d.x, c.y + d.y, c.z + d.z,
     };
 
-    static const GLsizei index_count = 36;
-    static const uint indices[] = {
+    const uint indices[] = {
         0, 1, 2, 0, 2, 3, // Front
+        5, 4, 7, 5, 7, 6, // Back
         4, 0, 3, 4, 3, 7, // Left
         1, 5, 6, 1, 6, 2, // Right
         3, 2, 6, 3, 6, 7, // Top
         0, 1, 5, 0, 5, 4, // Bottom
-        5, 4, 7, 5, 7, 6, // Back
     };
 
-    Mesh mesh = {};
-    mesh.count = index_count;
-
-    // Create vertex array object
-    glGenVertexArrays(1, &mesh.vao);
-    glBindVertexArray(mesh.vao);
-
-    // Create vertex buffer
-    glGenBuffers(1, &mesh.vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_count*3, vertices, GL_STATIC_DRAW);
-
-    // Create index buffer
-    glGenBuffers(1, &mesh.ibo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint)*index_count, indices, GL_STATIC_DRAW);
-
-    // Setup vertex attributes
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-    // Reset state
-    glBindVertexArray(0);
-    glDisableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glDisableVertexAttribArray(0);
-    return mesh;
+    Mesh_Layout layouts[] = { { Layout_Positions, 3, GL_FLOAT, GL_FALSE, 0, 0 } };
+    return generate_mesh_from_data(vertices,
+                                   indices,
+                                   layouts,
+                                   array_count(vertices),
+                                   array_count(indices),
+                                   array_count(layouts));
 }
 
-void
+Mesh
+create_cuboid_mesh(glm::vec3 c, glm::vec3 d) {
+    const float vertices[] = {
+        // Front
+        c.x - d.x, c.y - d.y, c.z - d.z, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+        c.x + d.x, c.y - d.y, c.z - d.z, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+        c.x + d.x, c.y + d.y, c.z - d.z, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+        c.x - d.x, c.y + d.y, c.z - d.z, 0.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+
+        // Back
+        c.x - d.x, c.y - d.y, c.z + d.z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        c.x + d.x, c.y - d.y, c.z + d.z, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        c.x + d.x, c.y + d.y, c.z + d.z, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+        c.x - d.x, c.y + d.y, c.z + d.z, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+
+        // Left
+        c.x - d.x, c.y - d.y, c.z + d.z, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+        c.x - d.x, c.y - d.y, c.z - d.z, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+        c.x - d.x, c.y + d.y, c.z - d.z, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+        c.x - d.x, c.y + d.y, c.z + d.z, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+
+        // Right
+        c.x + d.x, c.y - d.y, c.z - d.z, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        c.x + d.x, c.y + d.y, c.z - d.z, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        c.x + d.x, c.y - d.y, c.z + d.z, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        c.x + d.x, c.y + d.y, c.z + d.z, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+
+        // Top
+        c.x + d.x, c.y + d.y, c.z - d.z, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+        c.x - d.x, c.y + d.y, c.z - d.z, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+        c.x + d.x, c.y + d.y, c.z + d.z, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+        c.x - d.x, c.y + d.y, c.z + d.z, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+
+        // Bottom
+        c.x - d.x, c.y - d.y, c.z - d.z, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+        c.x + d.x, c.y - d.y, c.z - d.z, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+        c.x - d.x, c.y - d.y, c.z - d.z, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+        c.x + d.x, c.y - d.y, c.z - d.z, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+    };
+
+    uint indices[36];
+    for (int i = 0; i < 6; i++) {
+        indices[i*6] = i;
+        indices[i*6 + 1] = i*4 + 1;
+        indices[i*6 + 2] = i*4 + 2;
+        indices[i*6 + 3] = i*4;
+        indices[i*6 + 4] = i*4 + 2;
+        indices[i*6 + 5] = i*4 + 3;
+    };
+
+    Mesh_Layout layouts[] = { { Layout_Positions, 3, GL_FLOAT, GL_FALSE, 8, 0 },
+                              { Layout_Texcoords, 2, GL_FLOAT, GL_FALSE, 8, 3 },
+                              { Layout_Normals,   3, GL_FLOAT, GL_FALSE, 8, 5 } };
+
+    return generate_mesh_from_data(vertices,
+                                   indices,
+                                   layouts,
+                                   array_count(vertices),
+                                   array_count(indices),
+                                   array_count(layouts));
+}
+
+inline void
+apply_basic_2d_shader(Basic_2D_Shader* shader) {
+    glUseProgram(shader->program);
+}
+
+inline void
 apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation) {
     glUseProgram(shader->program);
     glUniform1f(shader->u_light_attenuation, light_attenuation);
@@ -124,7 +223,7 @@ update_camera_3d(Camera3D* camera, f32 aspect_ratio) {
     if (is_transform_dirty || camera->is_dirty) {
         camera->combined_matrix = camera->perspective_matrix * camera->transform.matrix;
     }
-    
+
     camera->is_dirty = false;
 }
 
@@ -153,10 +252,12 @@ update_camera_2d(Camera2D* camera, f32 mouse_x, f32 mouse_y, f32 zoom, bool pan)
 }
 
 void
-begin_3d_scene(const glm::vec4& clear_color, const glm::vec4& viewport) {
+begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing) {
     // Enable depth testing
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
+    if (depth_testing) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+    }
 
     // Set viewport
     glViewport((GLsizei) viewport.x, (GLsizei) viewport.y, (GLsizei) viewport.z, (GLsizei) viewport.w);
@@ -167,14 +268,41 @@ begin_3d_scene(const glm::vec4& clear_color, const glm::vec4& viewport) {
 }
 
 void
-end_3d_scene() {
+end_scene() {
     // Resetting opengl the state
     glUseProgram(0);
     glBindVertexArray(0);
     glDisable(GL_DEPTH_TEST);
+    glLineWidth(1);
+    glPointSize(1);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
-GLuint
+Texture
+load_2d_texture_from_file(const char* filename) {
+    std::ostringstream path_stream;
+    path_stream << res_folder;
+    path_stream << "textures/";
+    path_stream << filename;
+    const char* filepath = path_stream.str().c_str();
+
+    int width, height, num_channels;
+    unsigned char* data = stbi_load(filepath, &width, &height, &num_channels, 4);
+
+    Texture texture = {};
+    texture.target = GL_TEXTURE_2D;
+    glGenTextures(1, &texture.handle);
+    glBindTexture(texture.target, texture.handle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glBindTexture(texture.target, 0);
+
+    stbi_image_free(data);
+    return texture;
+}
+
+static GLuint
 load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_shader) {
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     GLint length = (GLint) std::strlen(vertex_shader);
@@ -225,41 +353,63 @@ load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_sh
     return program;
 }
 
+static GLuint
+load_glsl_shader_from_file(const char* filename) {
+    std::ostringstream path_stream;
+    path_stream << res_folder;
+    path_stream << "shaders/";
+    path_stream << filename;
+    std::string filepath = path_stream.str();
+    std::string contents = read_entire_file_to_string(filepath);
+    std::string vertex_source;
+    std::string fragment_source;
+
+    usize index = contents.find("#shader ", 0);
+    while (index != std::string::npos) {
+        usize beg_vs = contents.find("GL_VERTEX_SHADER", index);
+        usize beg_fs = contents.find("GL_FRAGMENT_SHADER", index);
+
+        if (beg_vs < beg_fs && beg_vs != std::string::npos) {
+            usize beg = beg_vs + 17;
+            index = contents.find("#shader ", beg);
+            vertex_source = contents.substr(beg, index - beg);
+        } else if (beg_fs != std::string::npos) {
+            usize beg = beg_fs + 19;
+            index = contents.find("#shader ", beg);
+            fragment_source = contents.substr(beg, index - beg);
+        } else {
+            printf("Failed to parse shader file, expected shader type");
+            return 0;
+        }
+    }
+
+    return load_glsl_shader_from_sources(vertex_source.c_str(), fragment_source.c_str());
+}
+
+Basic_2D_Shader
+compile_basic_2d_shader() {
+    Basic_2D_Shader shader = {};
+    shader.program = load_glsl_shader_from_file("basic_2d.glsl");
+    shader.u_transform = glGetUniformLocation(shader.program, "transform");
+    shader.u_color = glGetUniformLocation(shader.program, "color");
+    return shader;
+}
+
 Basic_Shader
-compile_basic_material_shader() {
-    const char* vertex_code = R"(
-#version 330
-
-layout(location=0) in vec3 pos;
-out float illumination_amount;
-uniform mat4 transform;
-uniform float light_attenuation;
-uniform float light_intensity;
-
-void main() {
-    vec4 world_pos = transform * vec4(pos, 1.0f);
-    illumination_amount = log(1.0f/(length(world_pos)*light_attenuation))*light_intensity;
-    gl_Position = world_pos;
-}
-)";
-
-    const char* fragment_code = R"(
-#version 330
-
-out vec4 frag_color;
-in float illumination_amount;
-uniform vec4 color;
-
-void main() {
-    frag_color = color*illumination_amount;
-}
-)";
-
+compile_basic_shader() {
     Basic_Shader shader = {};
-    shader.program = load_glsl_shader_from_sources(vertex_code, fragment_code);
+    shader.program = load_glsl_shader_from_file("basic.glsl");
     shader.u_transform = glGetUniformLocation(shader.program, "transform");
     shader.u_color = glGetUniformLocation(shader.program, "color");
     shader.u_light_intensity = glGetUniformLocation(shader.program, "light_intensity");
     shader.u_light_attenuation = glGetUniformLocation(shader.program, "light_attenuation");
+    return shader;
+}
+
+Phong_Shader
+compile_phong_shader() {
+    Phong_Shader shader = {};
+    shader.program = load_glsl_shader_from_file("phong.glsl");
+    shader.u_transform = glGetUniformLocation(shader.program, "transform");
     return shader;
 }

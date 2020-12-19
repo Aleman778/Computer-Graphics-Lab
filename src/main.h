@@ -7,6 +7,7 @@
 #include <string>
 #include <fstream>
 #include <streambuf>
+#include <sstream>
 #include <vector>
 #include <random>
 #include <functional>
@@ -29,6 +30,9 @@
 
 #include <imgui.h>
 #include "imgui_impl_glfw_gl3.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 #define array_count(array) (sizeof(array)/sizeof((array)[0]))
 
@@ -60,6 +64,7 @@ enum Scene_Type {
     Scene_Koch_Snowflake,
     Scene_Triangulation,
     Scene_Basic_3D_Graphics,
+    Scene_Simple_World,
 };
 
 struct Button_State {
@@ -94,6 +99,7 @@ struct Window {
     Input input;
 };
 
+#include "geometry.h"
 #include "renderer.h"
 
 bool was_pressed(Button_State* state);
@@ -105,3 +111,10 @@ void opengl_debug_callback(GLenum source,
                            GLsizei length,
                            const GLchar* message,
                            const void* user_params);
+
+std::string read_entire_file_to_string(std::string filepath);
+
+const char* find_resource_folder();
+
+// NOTE(alexander): the path to the resource folder e.g. res/
+static const char* res_folder = find_resource_folder();

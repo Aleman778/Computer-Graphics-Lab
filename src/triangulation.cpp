@@ -18,13 +18,8 @@ struct Node {
     int children_count;
 };
 
-struct Vertex {
-    glm::vec2 pos;
-    glm::vec4 color;
-};
-
 struct Triangulation {
-    std::vector<Vertex> vertices;
+    std::vector<Vertex_2D> vertices;
     std::vector<uint> indices;
     Node* root;
 };
@@ -36,9 +31,7 @@ struct Triangulation_Scene {
     GLsizei vertex_count;
     GLsizei index_count;
 
-    GLuint shader;
-    GLint  tint_color_uniform;
-    GLint  transform_uniform;
+    Basic_2D_Shader shader;
 
     std::unordered_set<glm::vec2> points;
     Triangulation triangulation;
@@ -105,7 +98,7 @@ build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, Triangulation
 
     triangulation->vertices.reserve(convex_hull.size());
     for (int i = 0; i < convex_hull.size(); i++) {
-        Vertex v = { convex_hull[i], primary_fg_color };
+        Vertex_2D v = { convex_hull[i], primary_fg_color };
         triangulation->vertices.push_back(v);
     }
 
@@ -145,7 +138,7 @@ build_fan_triangulation(const std::vector<glm::vec2>& convex_hull, Triangulation
 }
 
 static void
-point_location(Node* node, glm::vec2 p, std::vector<Node*>* result, std::vector<Vertex>* vertices) {
+point_location(Node* node, glm::vec2 p, std::vector<Node*>* result, std::vector<Vertex_2D>* vertices) {
     if (!node) return;
     if (node->triangle) {
         // Make sure p is actual inside the triangle
@@ -206,7 +199,7 @@ split_triangle_at_edge(Triangulation* triangulation,
     Node* n2 = new Node();
 
     uint pv_index = (uint) triangulation->vertices.size();
-    Vertex pv = { p, primary_fg_color };
+    Vertex_2D pv = { p, primary_fg_color };
     triangulation->vertices.push_back(pv);
 
     n1->origin = p;
@@ -462,7 +455,7 @@ initialize_scene(Triangulation_Scene* scene) {
     // Create vertex buffer
     glGenBuffers(1, &scene->vbo);
     glBindBuffer(GL_ARRAY_BUFFER, scene->vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*scene->vertex_count, vdata, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_2D)*scene->vertex_count, vdata, GL_STATIC_DRAW);
 
     // Create index buffer
     glGenBuffers(1, &scene->ibo);
@@ -477,42 +470,9 @@ initialize_scene(Triangulation_Scene* scene) {
 
     // Done with vertex array
     glBindVertexArray(0);
- 
-    const char* vert_shader_source = R"vs(
-#version 330
-layout(location=0) in vec2 pos;
-layout(location=1) in vec4 color;
-out vec4 out_color;
-uniform mat4 transform;
 
-void main() {
-    gl_Position = transform * vec4(pos, 0.0f, 1.0f);
-    out_color = color;
-}
-)vs";
-
-    const char* frag_shader_source = R"fs(
-#version 330
-in  vec4 out_color;
-out vec4 frag_color;
-uniform vec4 tint_color;
-void main() {
-    frag_color = out_color*tint_color;
-}
-)fs";
-
-    scene->shader = load_glsl_shader_from_sources(vert_shader_source, frag_shader_source);
-    scene->tint_color_uniform = glGetUniformLocation(scene->shader, "tint_color");
-    if (scene->tint_color_uniform == -1) {
-        printf("[OpenGL] failed to get uniform location `color`");
-        return false;
-    }
-
-    scene->transform_uniform = glGetUniformLocation(scene->shader, "transform");
-    if (scene->transform_uniform == -1) {
-        printf("[OpenGL] failed to get uniform location `transform`");
-        return false;
-    }
+    // Compile basic shader
+    scene->shader = compile_basic_2d_shader();
 
     // Initialize colors
     scene->primary_color = primary_fg_color;
@@ -540,7 +500,7 @@ update_scene_buffer_data(Triangulation_Scene* scene, bool update_ibo=true) {
     if (scene->vertex_count > 0) vdata = &scene->triangulation.vertices[0];
     if (scene->index_count > 0)  idata = &scene->triangulation.indices[0];
     glBindBuffer(GL_ARRAY_BUFFER, scene->vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*scene->vertex_count, vdata, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_2D)*scene->vertex_count, vdata, GL_STATIC_DRAW);
     if (update_ibo) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene->ibo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint)*scene->index_count, idata, GL_STATIC_DRAW);
@@ -567,7 +527,7 @@ calculate_distance_coloring(Triangulation_Scene* scene) {
     f32 xm = 0;
     f32 ym = 0;
     for (int i = 0; i < scene->triangulation.vertices.size(); i++) {
-        Vertex v = scene->triangulation.vertices[i];
+        Vertex_2D v = scene->triangulation.vertices[i];
         xm += v.pos.x; ym += v.pos.y;
     }
     xm /= scene->vertex_count; ym /= scene->vertex_count;
@@ -575,7 +535,7 @@ calculate_distance_coloring(Triangulation_Scene* scene) {
     // Calculate maximum distance from any point to average point (xm, ym)
     f32 d = 0;
     for (int i = 0; i < scene->triangulation.vertices.size(); i++) {
-        Vertex v = scene->triangulation.vertices[i];
+        Vertex_2D v = scene->triangulation.vertices[i];
         f32 dsqr = glm::pow(v.pos.x - xm, 2.0f) + glm::pow(v.pos.y - ym, 2.0f);
         if (dsqr > d) d = dsqr;
     }
@@ -596,7 +556,7 @@ calculate_distance_coloring(Triangulation_Scene* scene) {
     };
 
     for (int i = 0; i < scene->triangulation.vertices.size(); i++) {
-        Vertex* v = &scene->triangulation.vertices[i];
+        Vertex_2D* v = &scene->triangulation.vertices[i];
         f32 dv = glm::sqrt(glm::pow(v->pos.x - xm, 2.0f) + glm::pow(v->pos.y - ym, 2.0f));
         v->color.r = red(dv);
         v->color.g = green(dv);
@@ -610,7 +570,7 @@ calculate_4_coloring(Triangulation_Scene* scene) {
     Triangulation* triangulation = &scene->triangulation;
 
     // Construct new vertices 
-    std::vector<Vertex> vertices;
+    std::vector<Vertex_2D> vertices;
 
     std::unordered_map<usize, int> tcolors; // remember triangle colors as index into scene->colors
 
@@ -652,9 +612,9 @@ calculate_4_coloring(Triangulation_Scene* scene) {
             }
             tcolors.emplace(t->index, color);
 
-            Vertex v0 = triangulation->vertices[t->v[0]];
-            Vertex v1 = triangulation->vertices[t->v[1]];
-            Vertex v2 = triangulation->vertices[t->v[2]];
+            Vertex_2D v0 = triangulation->vertices[t->v[0]];
+            Vertex_2D v1 = triangulation->vertices[t->v[1]];
+            Vertex_2D v2 = triangulation->vertices[t->v[2]];
             v0.color = scene->colors[color];
             v1.color = scene->colors[color];
             v2.color = scene->colors[color];
@@ -672,7 +632,7 @@ calculate_4_coloring(Triangulation_Scene* scene) {
     dfs_4_coloring(triangulation->root);
 
     // Update the buffers, set the triangulation vertices
-    std::vector<Vertex> old_vertices = triangulation->vertices;
+    std::vector<Vertex_2D> old_vertices = triangulation->vertices;
     triangulation->vertices = vertices;
     update_scene_buffer_data(scene, false); // ignore use of ibo
     
@@ -766,7 +726,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
                 Triangle* t = node->triangle;
 
                 // Copy vertices and indices, to restore original shape
-                std::vector<Vertex> vertices = triangulation->vertices;
+                std::vector<Vertex_2D> vertices = triangulation->vertices;
                 std::vector<uint> indices = triangulation->indices;
 
                 // Create a new vertices that will render the selected triangle
@@ -792,20 +752,16 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
             }
         }
     }
-
-    // Set viewport
-    glViewport(0, 0, window->width, window->height);
-
-    // Render and clear background
-    glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
-    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // Begin rendering our basic 2D scene
+    begin_scene(primary_bg_color, glm::vec4(0, 0, window->width, window->height));
 
     // Enable shader
-    glUseProgram(scene->shader);
+    apply_basic_2d_shader(&scene->shader);
 
     // Render `filled` triangulated shape
-    glUniformMatrix4fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(transform));
-    glUniform4f(scene->tint_color_uniform, 1.0f, 1.0f, 1.0f, 1.0f);
+    glUniformMatrix4fv(scene->shader.u_transform, 1, GL_FALSE, glm::value_ptr(transform));
+    glUniform4f(scene->shader.u_color, 1.0f, 1.0f, 1.0f, 1.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     if (scene->index_count > 0) glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
     else glDrawArrays(GL_TRIANGLES, 0, scene->vertex_count);
@@ -813,12 +769,12 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     // Render `outlined` triangulated shape
     glLineWidth(scene->camera.zoom*0.5f + 2.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    glUniform4f(scene->tint_color_uniform, 0.4f, 0.4f, 0.4f, 1.0f);
+    glUniform4f(scene->shader.u_color, 0.4f, 0.4f, 0.4f, 1.0f);
     if (scene->index_count > 0) glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
     else glDrawArrays(GL_TRIANGLES, 0, scene->vertex_count);
 
     // Render `points` used in triangulated shape
-    glUniform4f(scene->tint_color_uniform, 0.4f, 0.4f, 0.4f, 1.0f);
+    glUniform4f(scene->shader.u_color, 0.4f, 0.4f, 0.4f, 1.0f);
     glPointSize((scene->camera.zoom + 2.0f) + 4.0f);
     if (scene->index_count > 0) glDrawElements(GL_POINTS, scene->index_count, GL_UNSIGNED_INT, 0);
     else glDrawArrays(GL_POINTS, 0, scene->vertex_count);
@@ -872,9 +828,5 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     ImGui::Text("y = %.3f", y);
     ImGui::End();
 
-    // Reset states
-    glLineWidth(1);
-    glPointSize(1);
-    glUseProgram(0);
-    glBindVertexArray(0);
+    end_scene();
 }
