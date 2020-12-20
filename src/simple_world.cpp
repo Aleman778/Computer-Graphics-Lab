@@ -4,17 +4,20 @@
  * Simple 3D world rendered using OpenGL
  ***************************************************************************/
 
-
 struct Simple_World_Scene {
     Mesh cuboid_mesh;
-    Basic_Shader basic_shader;
+    Mesh ground_mesh;
+    
+    Phong_Shader phong_shader;
+
+    Texture texture_default;
+    Texture texture_forrest_ground;
 
     Graphics_Node nodes[100];
+    
+    Light_Setup light_setup;
 
-    Camera3D camera;
-
-    float light_attenuation;
-    float light_intensity;
+    Fps_Camera camera;
 
     bool show_gui;
     
@@ -23,27 +26,52 @@ struct Simple_World_Scene {
 
 static bool
 initialize_scene(Simple_World_Scene* scene) {
-    scene->basic_shader = compile_basic_shader();
-    scene->cuboid_mesh = create_basic_cuboid_mesh(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
+    scene->phong_shader = compile_phong_shader();
 
-    initialize_camera_3d(&scene->camera);
+    {
+        Mesh_Builder mb = {};
+        push_cuboid_mesh(&mb, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
+        scene->cuboid_mesh = create_mesh_from_builder(&mb);
+    }
+
+    {
+        Mesh_Builder mb = {};
+        push_quad(&mb,
+                  glm::vec3(-100.0f, -1.0f, -100.0f), glm::vec2(0.0f,     0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+                  glm::vec3( 100.0f, -1.0f, -100.0f), glm::vec2(200.0f,   0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+                  glm::vec3( 100.0f, -1.0f,  100.0f), glm::vec2(200.0f, 200.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+                  glm::vec3(-100.0f, -1.0f,  100.0f), glm::vec2(0.0f,   200.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        scene->ground_mesh = create_mesh_from_builder(&mb);
+    }
+
+    // Load textures
+    scene->texture_default = generate_white_2d_texture();
+    scene->texture_forrest_ground = load_2d_texture_from_file("forrest_ground.png");
 
     // Setup random number generator for generating cuboid positions
     std::random_device rd;
     std::mt19937 rng = std::mt19937(rd());
     std::uniform_real_distribution<f32> dist(-5.0f, 5.0f);
+    std::uniform_real_distribution<f32> comp(0.0f, 1.0f);
 
     // Create all the graphics nodes
     for (int i = 0; i < array_count(scene->nodes); i++) {
         Graphics_Node* node = &scene->nodes[i];
-        node->mesh = &scene->cuboid_mesh;
         node->material = {};
-        node->material.shader = &scene->basic_shader;
+        node->material.type = Material_Type_Phong;
+        node->material.Phong.shader = &scene->phong_shader;
+        
         if (i == 0) {
-            node->material.color = green_color;
+            node->mesh = &scene->ground_mesh;
+            node->material.Phong.main_texture = &scene->texture_forrest_ground;
+            node->material.Phong.object_color = glm::vec4(1.0f);
         } else {
-            node->material.color = primary_fg_color;
+            node->mesh = &scene->cuboid_mesh;
+            node->material.Phong.main_texture = &scene->texture_default;
+            node->material.Phong.object_color = primary_fg_color;
         }
+ 
+        node->material.shader = &scene->phong_shader.base;
 
         // Setup transform
         glm::vec3 pos(dist(rng)*3.0f, dist(rng)*2.0f, dist(rng) - 4.5f);
@@ -51,11 +79,15 @@ initialize_scene(Simple_World_Scene* scene) {
         initialize_transform(&node->transform, pos);
     }
 
+    // Setup lgihting 
+    scene->light_setup.color = glm::vec3(1.0f, 1.0f, 1.0f);
+    scene->light_setup.ambient_intensity = 0.4f;
+
     // Set fixed position for the first movable cuboid
     scene->nodes[0].transform.local_position = glm::vec3(0.0f, 0.0f, -1.0f);
 
-    scene->light_intensity = 0.4f;
-    scene->light_attenuation = 0.03f;
+    // Setup 3D camera
+    initialize_fps_camera(&scene->camera);
 
     scene->is_initialized = true;
     return true;
@@ -74,25 +106,9 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
      * Update
      ***********************************************************************/
 
-    // Control the movable cuboid
-    glm::vec3* pos = &scene->nodes[0].transform.local_position;
-    float speed = 0.02f;
-    if (window->input.shift_key.ended_down) {
-        speed = 0.08f;
-    }
-    
-    if (window->input.a_key.ended_down) pos->x -= speed;
-    if (window->input.d_key.ended_down) pos->x += speed;
-    if (window->input.w_key.ended_down) pos->y += speed;
-    if (window->input.s_key.ended_down) pos->y -= speed;
-    if (window->input.c_key.ended_down) pos->z += speed;
-    if (window->input.e_key.ended_down) pos->z -= speed;
-    scene->nodes[0].transform.is_dirty = true; // make sure to update matrix
-
     // update camera
-    if (window->width != 0 && window->height != 0) {
-        update_camera_3d(&scene->camera, (f32) window->width/(f32) window->height);
-    }
+    
+    update_fps_camera(&scene->camera, &window->input, window->width, window->height);
 
     /***********************************************************************
      * Rendering
@@ -102,12 +118,12 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     begin_scene(primary_bg_color, glm::vec4(0, 0, window->width, window->height), true);
     
     // Apply the basic shader
-    apply_basic_shader(&scene->basic_shader, scene->light_intensity, scene->light_attenuation);
+    apply_shader(&scene->phong_shader.base, &scene->light_setup);
 
     // Render nodes
     for (int i = 0; i < array_count(scene->nodes); i++) {
         Graphics_Node* node = &scene->nodes[i];
-        draw_graphics_node(node, &scene->camera);
+        draw_graphics_node(node, &scene->camera.base);
     }
 
     // Ending our basic 3D scene

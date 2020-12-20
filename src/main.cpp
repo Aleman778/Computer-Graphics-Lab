@@ -69,6 +69,10 @@ window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, 
         case GLFW_KEY_RIGHT_CONTROL: {
             state = &window->input.control_key;
         } break;
+            
+        case GLFW_KEY_ESCAPE: {
+            state = &window->input.escape_key;
+        } break;
 
         case GLFW_KEY_W: {
             state = &window->input.w_key;
@@ -298,13 +302,22 @@ main() {
         window.input.alt_key.half_transition_count = 0;
         window.input.shift_key.half_transition_count = 0;
         window.input.control_key.half_transition_count = 0;
+        window.input.escape_key.half_transition_count = 0;
         window.input.w_key.half_transition_count = 0;
         window.input.a_key.half_transition_count = 0;
         window.input.s_key.half_transition_count = 0;
         window.input.d_key.half_transition_count = 0;
         window.input.e_key.half_transition_count = 0;
         window.input.c_key.half_transition_count = 0;
-        
+
+        // handle mouse locking
+        if (window.input.mouse_locked) {
+            glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+            glfwSetCursorPos(glfw_window, window.width / 2.0, window.height / 2.0);
+        } else {
+            glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+
         glfwSwapBuffers(glfw_window);
         glfwPollEvents();
     }

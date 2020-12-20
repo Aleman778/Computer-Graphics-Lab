@@ -10,21 +10,16 @@ struct Vertex {
     glm::vec3 normal;
 };
 
-struct Mesh_Builder{
-    usize min_vertex_count;
-    usize max_vertex_count;
-    usize vertex_stride; // number of floats per vertex
-    f32* vertex_buffer;
-    f32* vertex_buffer_data_at;
-
-    usize min_index_count;
-    usize max_index_count;
-    u16* indices_buffer;
-    u16* indices_buffer_data_at;
+struct Mesh_Builder {
+    std::vector<Vertex> vertices;
+    std::vector<u16> indices;
 };
 
-void
-initialze_mesh_data(usize min_vertex_count, usize vertex_stride, usize min_index_count);
+inline void push_quad(Mesh_Builder* mb, const Vertex& v0, Vertex v1, Vertex v2, Vertex v3);
+inline void push_quad(Mesh_Builder* mb,
+                      glm::vec3 p1, glm::vec2 t1, glm::vec3 n1,
+                      glm::vec3 p2, glm::vec2 t2, glm::vec3 n2,
+                      glm::vec3 p3, glm::vec2 t3, glm::vec3 n3,
+                      glm::vec3 p4, glm::vec2 t4, glm::vec3 n4);
 
-void
-write_3d_quad(Mesh_Builder* data, const Vertex& v0, Vertex v1, Vertex v2, Vertex v3);
+void push_cuboid_mesh(Mesh_Builder* mb, glm::vec3 c, glm::vec3 d);

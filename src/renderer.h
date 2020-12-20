@@ -28,23 +28,31 @@ struct Texture {
     GLuint handle;
 };
 
-struct Basic_2D_Shader {
+struct Shader_Base {
     GLuint program;
-    GLint u_transform;
-    GLint u_color;
+    GLint u_mvp_transform;
+    struct {
+        GLint color;
+        GLint ambient_intensity;
+    } u_light_setup;
 };
 
-struct Shader {
-    GLuint program;
-    GLint u_transform;
+struct Basic_2D_Shader {
+    Shader_Base base;
+    GLint u_color;
 };
 
 struct Basic_Shader {
-    GLuint program;
-    GLint u_transform;
+    Shader_Base base;
     GLint u_color;
     GLint u_light_attenuation;
     GLint u_light_intensity;
+};
+
+struct Phong_Shader {
+    Shader_Base base;
+    GLint u_object_color;
+    GLint u_sampler;
 };
 
 struct Light_Setup {
@@ -52,14 +60,29 @@ struct Light_Setup {
     float ambient_intensity;
 };
 
-struct Phong_Shader {
-    GLuint program;
-    GLint u_transform;
+enum Material_Type {
+    Material_Type_Basic,
+    Material_Type_Phong,
 };
 
 struct Basic_Material {
     Basic_Shader* shader;
-    glm::vec3 color;
+    glm::vec4 color;
+};
+
+struct Phong_Material {
+    Phong_Shader* shader;
+    glm::vec4 object_color;
+    Texture* main_texture;
+};
+
+struct Material {
+    Material_Type type;
+    union {
+        Basic_Material Basic;
+        Phong_Material Phong;
+    };
+    Shader_Base* shader;
 };
 
 struct Transform {
@@ -72,11 +95,11 @@ struct Transform {
 
 struct Graphics_Node {
     Mesh* mesh;
-    Basic_Material material;
+    Material material;
     Transform transform;
 };
 
-struct Camera3D {
+struct Camera_3D {
     f32 fov;
     f32 near;
     f32 far;
@@ -87,7 +110,14 @@ struct Camera3D {
     bool is_dirty; // does projection and combined matrix need to be updated?
 };
 
-struct Camera2D {
+struct Fps_Camera {
+    Camera_3D base;
+    f32 rotation_x;
+    f32 rotation_y;
+    f32 sensitivity;
+};
+
+struct Camera_2D {
     f32 offset_x;
     f32 offset_y;
     f32 x;
@@ -95,14 +125,13 @@ struct Camera2D {
     f32 zoom;
 };
 
+Mesh create_cuboid_basic_mesh(glm::vec3 c, glm::vec3 d);
 Mesh create_cuboid_mesh(glm::vec3 c, glm::vec3 d);
-Mesh create_cuboid_mesh_with_normals(glm::vec3 c, glm::vec3 d);
 
-inline void apply_basic_2d_shader(Basic_2D_Shader* shader);
+inline void apply_shader(Shader_Base* shader, Light_Setup* light_setup);
 inline void apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation);
-inline void apply_phong_shader(Phong_Shader* shader, Light_Setup* light_setup);
 
-void update_basic_material(Basic_Material* material);
+inline void apply_material(Material* material, const glm::mat4& mvp_transform);
 
 void initialize_transform(Transform* transform,
                           glm::vec3 pos=glm::vec3(0.0f),
@@ -110,20 +139,27 @@ void initialize_transform(Transform* transform,
                           glm::vec3 scale=glm::vec3(1.0f));
 void update_transform(Transform* transform);
 
-
 void draw_mesh();
 void draw_graphics_node(Graphics_Node* mesh);
 
-void initialize_camera_3d(Camera3D* camera, f32 near=0.1f, f32 far=10000.0f, f32 aspect_ratio=1.0f);
-void update_camera_3d(Camera3D* camera, f32 aspect_ratio);
-    
-void update_camera_2d(Camera2D* camera, f32 mouse_x, f32 mouse_y, f32 zoom, bool pan);
+void initialize_camera_3d(Camera_3D* camera, f32 near=0.1f, f32 far=10000.0f, f32 aspect_ratio=1.0f);
+void update_camera_3d(Camera_3D* camera, f32 aspect_ratio);
+
+void initialize_fps_camera(Fps_Camera* camera,
+                           f32 near=0.1f,
+                           f32 far=10000.0f,
+                           f32 senitivity=0.01f,
+                           f32 aspect_ratio=1.0f);
+void update_fps_camera(Fps_Camera* camera, Input* input, int width, int height);
+
+void update_camera_2d(Camera_2D* camera, Input* input);
 
 void begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false);
 
 void end_scene();
 
-Texture load_2d_texture_from_file(const char* filepath);
+Texture generate_white_2d_texture();
+Texture load_2d_texture_from_file(const char* filepath, bool gen_mipmaps=true, f32 mipmap_bias=-0.8f);
 
 Basic_2D_Shader compile_basic_2d_shader();
 Basic_Shader compile_basic_shader();

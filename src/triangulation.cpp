@@ -36,7 +36,7 @@ struct Triangulation_Scene {
     std::unordered_set<glm::vec2> points;
     Triangulation triangulation;
 
-    Camera2D camera;
+    Camera_2D camera;
 
     std::mt19937 rng;
 
@@ -679,11 +679,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     Triangulation* triangulation = &scene->triangulation;
 
     // Setup orthographic projection and camera transform
-    update_camera_2d(&scene->camera,
-                     window->input.mouse_x,
-                     window->input.mouse_y,
-                     window->input.mouse_scroll_y,
-                     window->input.right_mb.ended_down);
+    update_camera_2d(&scene->camera, &window->input);
     glm::mat4 transform = glm::ortho(0.0f, (f32) window->width, (f32) window->height, 0.0f, 0.0f, 1000.0f);
     transform = glm::scale(transform, glm::vec3(scene->camera.zoom + 1.0f, scene->camera.zoom + 1.0f, 0));
     transform = glm::translate(transform, glm::vec3(scene->camera.x, scene->camera.y, 0));
@@ -757,10 +753,10 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     begin_scene(primary_bg_color, glm::vec4(0, 0, window->width, window->height));
 
     // Enable shader
-    apply_basic_2d_shader(&scene->shader);
+    apply_shader(&scene->shader.base, NULL);
 
     // Render `filled` triangulated shape
-    glUniformMatrix4fv(scene->shader.u_transform, 1, GL_FALSE, glm::value_ptr(transform));
+    glUniformMatrix4fv(scene->shader.base.u_mvp_transform, 1, GL_FALSE, glm::value_ptr(transform));
     glUniform4f(scene->shader.u_color, 1.0f, 1.0f, 1.0f, 1.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     if (scene->index_count > 0) glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);

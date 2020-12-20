@@ -75,8 +75,12 @@ struct Button_State {
 struct Input {
     f32 mouse_x;
     f32 mouse_y;
+
     f32 mouse_scroll_x;
     f32 mouse_scroll_y;
+
+    bool mouse_locked;
+    
     Button_State left_mb;
     Button_State right_mb;
     Button_State middle_mb;
@@ -91,6 +95,7 @@ struct Input {
     Button_State alt_key;
     Button_State shift_key;
     Button_State control_key;
+    Button_State escape_key;
 };
 
 struct Window {

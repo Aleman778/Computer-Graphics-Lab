@@ -10,7 +10,7 @@ struct Basic_3D_Graphics_Scene {
 
     Graphics_Node nodes[100];
 
-    Camera3D camera;
+    Camera_3D camera;
 
     float light_attenuation;
     float light_intensity;
@@ -23,7 +23,10 @@ struct Basic_3D_Graphics_Scene {
 static bool
 initialize_scene(Basic_3D_Graphics_Scene* scene) {
     scene->basic_shader = compile_basic_shader();
-    scene->cuboid_mesh = create_basic_cuboid_mesh(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
+
+    Mesh_Builder mb = {};
+    push_cuboid_mesh(&mb, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
+    scene->cuboid_mesh = create_mesh_from_builder(&mb);
 
     initialize_camera_3d(&scene->camera);
 
@@ -37,11 +40,13 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
         Graphics_Node* node = &scene->nodes[i];
         node->mesh = &scene->cuboid_mesh;
         node->material = {};
-        node->material.shader = &scene->basic_shader;
+        node->material.type = Material_Type_Phong;
+        node->material.Basic.shader = &scene->basic_shader;
+        node->material.shader = &scene->basic_shader.base;
         if (i == 0) {
-            node->material.color = green_color;
+            node->material.Basic.color = green_color;
         } else {
-            node->material.color = primary_fg_color;
+            node->material.Basic.color = primary_fg_color;
         }
 
         // Setup transform
