@@ -40,7 +40,7 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
         Graphics_Node* node = &scene->nodes[i];
         node->mesh = &scene->cuboid_mesh;
         node->material = {};
-        node->material.type = Material_Type_Phong;
+        node->material.type = Material_Type_Basic;
         node->material.Basic.shader = &scene->basic_shader;
         node->material.shader = &scene->basic_shader.base;
         if (i == 0) {

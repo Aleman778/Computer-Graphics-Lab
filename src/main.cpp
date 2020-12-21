@@ -290,8 +290,9 @@ main() {
             }
         }
 
-        
-        ImGui::Render();
+        if (!window.input.mouse_locked) {
+            ImGui::Render();
+        }
 
         // reset input states and mouse scroll
         window.input.mouse_scroll_x = 0;

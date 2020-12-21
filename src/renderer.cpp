@@ -42,43 +42,35 @@ create_mesh_from_builder(Mesh_Builder* mb) {
 
     return mesh;
 }
+
 inline void
-apply_shader(Shader_Base* shader, Light_Setup* light_setup) {
+apply_shader(Shader_Base* shader, Light_Setup* light_setup, glm::vec3 sky_color, f32 fog_density, f32 fog_gradient) {
     glUseProgram(shader->program);
     if (light_setup) {
+        glUniform3fv(shader->u_light_setup.position, 1, glm::value_ptr(light_setup->position));
+        glUniform3fv(shader->u_light_setup.view_position, 1, glm::value_ptr(light_setup->view_position));
         glUniform3fv(shader->u_light_setup.color, 1, glm::value_ptr(light_setup->color));
         glUniform1f(shader->u_light_setup.ambient_intensity, light_setup->ambient_intensity);
+    }
+
+    if (shader->u_sky_color != -1) {
+        glUniform3fv(shader->u_sky_color, 1, glm::value_ptr(sky_color));
+    }
+    
+    if (shader->u_fog_density != -1) {
+        glUniform1f(shader->u_fog_density, fog_density);
+    }
+    
+    if (shader->u_fog_gradient != -1) {
+        glUniform1f(shader->u_fog_gradient, fog_gradient);
     }
 }
 
 inline void
 apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation) {
-    apply_shader(&shader->base, NULL);
+    glUseProgram(shader->base.program);
     glUniform1f(shader->u_light_attenuation, light_attenuation);
     glUniform1f(shader->u_light_intensity, light_intensity);
-}
-
-inline void
-apply_material(Material* material, const glm::mat4& mvp_transform) {
-    glUniformMatrix4fv(material->shader->u_mvp_transform, 1, GL_FALSE, glm::value_ptr(mvp_transform));
-
-    switch (material->type) {
-        case Material_Type_Basic: {
-            Basic_Material* basic = &material->Basic;
-            glUniform4fv(basic->shader->u_color, 1, glm::value_ptr(basic->color));
-        } break;
-
-        case Material_Type_Phong: {
-            Phong_Material* phong = &material->Phong;
-            glUniform4fv(phong->shader->u_object_color, 1, glm::value_ptr(phong->object_color));
-
-            if (phong->main_texture) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(phong->main_texture->target, phong->main_texture->handle);
-                glUniform1i(phong->shader->u_sampler, 0);
-            }
-        } break;
-    }
 }
 
 void
@@ -102,10 +94,35 @@ update_transform(Transform* transform) {
 
 void
 draw_graphics_node(Graphics_Node* node, Camera_3D* camera) {
-    glBindVertexArray(node->mesh->vao);
+    // Update transform of the node
     update_transform(&node->transform);
     glm::mat4 mvp_transform = camera->combined_matrix * node->transform.matrix;
-    apply_material(&node->material, mvp_transform);
+
+    // Apply material
+    Material* material = &node->material;
+    glUniformMatrix4fv(material->shader->u_mvp_transform, 1, GL_FALSE, glm::value_ptr(mvp_transform));
+    switch (material->type) {
+        case Material_Type_Basic: {
+            Basic_Material* basic = &material->Basic;
+            glUniform4fv(basic->shader->u_color, 1, glm::value_ptr(basic->color));
+        } break;
+
+        case Material_Type_Phong: {
+            Phong_Material* phong = &material->Phong;
+            glUniformMatrix4fv(material->shader->u_model_transform, 1,
+                               GL_FALSE, glm::value_ptr(node->transform.matrix));
+            glUniform4fv(phong->shader->u_object_color, 1, glm::value_ptr(phong->object_color));
+
+            if (phong->main_texture) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(phong->main_texture->target, phong->main_texture->handle);
+                glUniform1i(phong->shader->u_sampler, 0);
+            }
+        } break;
+    }
+
+    // Draw mesh
+    glBindVertexArray(node->mesh->vao);
     glDrawElements(GL_TRIANGLES, node->mesh->count, GL_UNSIGNED_SHORT, 0);
 }
 
@@ -173,7 +190,6 @@ update_fps_camera(Fps_Camera* camera, Input* input, int width, int height) {
             if (camera->rotation_y > 1.2f) {
                 camera->rotation_y = 1.2f;
             }
-            printf("camera->rotation_y = %f\n", camera->rotation_y);
             is_dirty = true;
         }
 
@@ -229,7 +245,7 @@ update_fps_camera(Fps_Camera* camera, Input* input, int width, int height) {
     // Update the actual camera matrices
     f32 aspect_ratio = 0.0f;
     if (width != 0 && height != 0) {
-        aspect_ratio = width/height;
+        aspect_ratio = ((f32) width)/((f32) height);
     }
     update_camera_3d(&camera->base, aspect_ratio);
 }
@@ -303,7 +319,11 @@ generate_white_2d_texture() {
 }
 
 Texture
-load_2d_texture_from_file(const char* filename, bool gen_mipmaps, f32 lod_bias) {
+load_2d_texture_from_file(const char* filename,
+                          bool gen_mipmaps,
+                          f32 lod_bias,
+                          bool use_anisotropic_filtering, // requires gen_mipmaps=true
+                          f32 max_anisotropy) {
     std::ostringstream path_stream;
     path_stream << res_folder;
     path_stream << "textures/";
@@ -327,7 +347,16 @@ load_2d_texture_from_file(const char* filename, bool gen_mipmaps, f32 lod_bias) 
     if (gen_mipmaps) {
         glGenerateMipmap(texture.target);
         glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, lod_bias);
+
+        if (GLEW_ARB_texture_filter_anisotropic && use_anisotropic_filtering) {
+            f32 amount = 0.0f;
+            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &amount);
+            amount = amount > max_anisotropy ? max_anisotropy : amount;
+            glTexParameterf(texture.target, GL_TEXTURE_MAX_ANISOTROPY, amount);
+            glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, 0);
+        } else {
+            glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, lod_bias);
+        }
     } else {
         glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     }
@@ -425,7 +454,15 @@ load_glsl_shader_from_file(const char* filename) {
 static void
 setup_shader_base_uniforms(Shader_Base* shader_base) {
     GLuint program = shader_base->program;
+    shader_base->u_model_transform = glGetUniformLocation(program, "model_transform");
     shader_base->u_mvp_transform = glGetUniformLocation(program, "mvp_transform");
+
+    shader_base->u_sky_color = glGetUniformLocation(program, "sky_color");
+    shader_base->u_fog_density = glGetUniformLocation(program, "fog_density");
+    shader_base->u_fog_gradient = glGetUniformLocation(program, "fog_gradient");
+
+    shader_base->u_light_setup.position = glGetUniformLocation(program, "light_setup.position");
+    shader_base->u_light_setup.view_position = glGetUniformLocation(program, "light_setup.view_position");
     shader_base->u_light_setup.color = glGetUniformLocation(program, "light_setup.color");
     shader_base->u_light_setup.ambient_intensity = glGetUniformLocation(program, "light_setup.ambient_intensity");
 }
@@ -435,6 +472,9 @@ compile_basic_2d_shader() {
     Basic_2D_Shader shader = {};
     shader.base.program = load_glsl_shader_from_file("basic_2d.glsl");
     shader.base.u_mvp_transform = glGetUniformLocation(shader.base.program, "mvp_transform");
+    shader.base.u_sky_color     = -1;
+    shader.base.u_fog_density   = -1;
+    shader.base.u_fog_gradient  = -1;
     shader.u_color              = glGetUniformLocation(shader.base.program, "color");
     return shader;
 }
@@ -444,6 +484,9 @@ compile_basic_shader() {
     Basic_Shader shader = {};
     shader.base.program = load_glsl_shader_from_file("basic.glsl");
     shader.base.u_mvp_transform = glGetUniformLocation(shader.base.program, "mvp_transform");
+    shader.base.u_sky_color     = -1;
+    shader.base.u_fog_density   = -1;
+    shader.base.u_fog_gradient  = -1;
     shader.u_color              = glGetUniformLocation(shader.base.program, "color");
     shader.u_light_intensity    = glGetUniformLocation(shader.base.program, "light_intensity");
     shader.u_light_attenuation  = glGetUniformLocation(shader.base.program, "light_attenuation");
