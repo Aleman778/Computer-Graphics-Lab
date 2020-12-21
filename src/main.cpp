@@ -12,7 +12,7 @@ was_pressed(Button_State* state) {
         (state->half_transition_count == 1 && state->ended_down);
 }
 
-void
+static void
 opengl_debug_callback(GLenum source,
                       GLenum type,
                       GLenum id,
@@ -48,7 +48,7 @@ opengl_debug_callback(GLenum source,
     }
 }
 
-void
+static void
 window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, int mods) {
     if (action == GLFW_REPEAT) return; // NOTE(alexander): don't care about repeat, breaks my input system!
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
@@ -105,7 +105,7 @@ window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, 
     }
 }
 
-void
+static void
 window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods) {
     if (ImGui::IsMouseHoveringAnyWindow()) {
         ImGui_ImplGlfwGL3_MouseButtonCallback(glfw_window, button, action, mods);
@@ -133,7 +133,7 @@ window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods)
     }
 }
 
-void
+static void
 window_scroll_callback(GLFWwindow* glfw_window, double xoffset, double yoffset) {
     if (ImGui::IsMouseHoveringAnyWindow()) {
         ImGui_ImplGlfwGL3_ScrollCallback(glfw_window, xoffset, yoffset);
@@ -146,7 +146,7 @@ window_scroll_callback(GLFWwindow* glfw_window, double xoffset, double yoffset) 
     }
 }
 
-void
+static void
 window_cursor_pos_callback(GLFWwindow* glfw_window, double xpos, double ypos) {
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
@@ -155,7 +155,15 @@ window_cursor_pos_callback(GLFWwindow* glfw_window, double xpos, double ypos) {
     }
 }
 
-void
+static void
+window_focus_callback(GLFWwindow* glfw_window, int focused) {
+    Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
+    if (window) {
+        window->is_focused = focused == GLFW_TRUE;
+    }
+}
+
+static void
 window_size_callback(GLFWwindow* glfw_window, i32 width, i32 height) {
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
@@ -201,6 +209,7 @@ main() {
     Window window = {};
     window.width = 1280;
     window.height = 720;
+    window.is_focused = true;
 
     GLFWwindow* glfw_window = glfwCreateWindow(window.width, window.height, "D7045E Lab", 0, 0);
     glfwSetWindowUserPointer(glfw_window, &window);
@@ -233,6 +242,7 @@ main() {
     glfwSetMouseButtonCallback(glfw_window, window_mouse_callback);
     glfwSetCursorPosCallback(glfw_window,   window_cursor_pos_callback);
     // glfwSetCursorEnterCallback(glfw_window, enter_callback);
+    glfwSetWindowFocusCallback(glfw_window, window_focus_callback);
     glfwSetScrollCallback(glfw_window,      window_scroll_callback);
     glfwSetWindowSizeCallback(glfw_window,  window_size_callback);
 
@@ -314,13 +324,20 @@ main() {
         // handle mouse locking
         if (window.input.mouse_locked) {
             glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-            glfwSetCursorPos(glfw_window, window.width / 2.0, window.height / 2.0);
+            if (window.is_focused) {
+                glfwSetCursorPos(glfw_window, window.width / 2.0, window.height / 2.0);
+            }
         } else {
             glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
 
         glfwSwapBuffers(glfw_window);
         glfwPollEvents();
+
+        if (window.input.mouse_locked && !window.is_focused) {
+            window.input.mouse_x = window.width / 2.0f;
+            window.input.mouse_y = window.height / 2.0f;
+        }
     }
 
     glfwDestroyWindow(glfw_window);

@@ -102,6 +102,7 @@ struct Window {
     i32 width;
     i32 height;
     Input input;
+    bool is_focused;
 };
 
 #include "geometry.h"

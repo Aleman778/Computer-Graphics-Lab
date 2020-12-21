@@ -55,7 +55,7 @@ uniform vec4 object_color;
 uniform vec3 sky_color;
 
 vec4 apply_fog(in vec4 color) {
-    float dist = length(-light_setup.view_position - fragment.position);
+    float dist = length(-light_setup.view_position - fragment.world_position);
     float fog_amount = exp(-pow(dist * fog_density, fog_gradient));
     fog_amount = clamp(fog_amount, 0.0f, 1.0f);
     return mix(vec4(sky_color, 1.0f), color, fog_amount);

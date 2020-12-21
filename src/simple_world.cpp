@@ -69,7 +69,7 @@ initialize_scene(Simple_World_Scene* scene) {
         node->material.Phong.shader = &scene->phong_shader;
 
         // Setup transform
-        glm::vec3 pos(dist(rng), (dist(rng) + 9.0f)*0.4f, dist(rng));
+        glm::vec3 pos(dist(rng), dist(rng)*0.5f + 4.0fi, dist(rng));
         initialize_transform(&node->transform, pos);
         
         if (i == 0) {
@@ -165,7 +165,7 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
     ImGui::ColorEdit3("Sky Color:", &scene->sky_color.x);
     ImGui::Text("Fog:");
-    ImGui::SliderFloat("Density", &scene->fog_density, 0.01f, 0.1f);
+    ImGui::SliderFloat("Density", &scene->fog_density, 0.01f, 0.5f);
     ImGui::SliderFloat("Gradient", &scene->fog_gradient, 1.0f, 10.0f);
     ImGui::End();
 }

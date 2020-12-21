@@ -280,6 +280,10 @@ begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_
     if (depth_testing) {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
+        
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CW);
     }
 
     // Set viewport
