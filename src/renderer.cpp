@@ -1,11 +1,10 @@
 
-
 Mesh
 create_mesh_from_builder(Mesh_Builder* mb) {
     Mesh mesh = {};
     GLsizei vertex_count = (GLsizei) mb->vertices.size();
     GLsizei index_count  = (GLsizei) mb->indices.size();
-    
+
     if (index_count == 0) mesh.count = vertex_count;
     else                  mesh.count = index_count;
 
@@ -17,6 +16,8 @@ create_mesh_from_builder(Mesh_Builder* mb) {
     glGenBuffers(1, &mesh.vbo);
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*vertex_count, &mb->vertices[0].pos.x, GL_STATIC_DRAW);
+
+    printf("create_mesh ... vertex_count = %d, index_count = %d\n", (int) vertex_count, (int) index_count);
 
     // Create index buffer
     if (index_count > 0) {
@@ -40,6 +41,8 @@ create_mesh_from_builder(Mesh_Builder* mb) {
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(2);
 
+    mesh.mode = GL_TRIANGLES;
+
     return mesh;
 }
 
@@ -56,11 +59,11 @@ apply_shader(Shader_Base* shader, Light_Setup* light_setup, glm::vec3 sky_color,
     if (shader->u_sky_color != -1) {
         glUniform3fv(shader->u_sky_color, 1, glm::value_ptr(sky_color));
     }
-    
+
     if (shader->u_fog_density != -1) {
         glUniform1f(shader->u_fog_density, fog_density);
     }
-    
+
     if (shader->u_fog_gradient != -1) {
         glUniform1f(shader->u_fog_gradient, fog_gradient);
     }
@@ -111,23 +114,34 @@ draw_graphics_node(Graphics_Node* node, Camera_3D* camera) {
             Phong_Material* phong = &material->Phong;
             glUniformMatrix4fv(material->shader->u_model_transform, 1,
                                GL_FALSE, glm::value_ptr(node->transform.matrix));
-            glUniform4fv(phong->shader->u_object_color, 1, glm::value_ptr(phong->object_color));
 
-            if (phong->main_texture) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(phong->main_texture->target, phong->main_texture->handle);
-                glUniform1i(phong->shader->u_sampler, 0);
-            }
+            glUniform3fv(phong->shader->u_diffuse_color, 1, glm::value_ptr(phong->diffuse_color));
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
+            glUniform1i(phong->shader->u_diffuse, 0);
+            
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
+            glUniform1i(phong->shader->u_specular, 1);
+
+            glUniform1f(phong->shader->u_shininess, phong->shininess);
+            
         } break;
     }
 
     // Draw mesh
     glBindVertexArray(node->mesh->vao);
-    glDrawElements(GL_TRIANGLES, node->mesh->count, GL_UNSIGNED_SHORT, 0);
+    if (node->mesh->ibo > 0) {
+        glDrawElements(node->mesh->mode, node->mesh->count, GL_UNSIGNED_SHORT, 0);
+    } else {
+        glDrawArrays(node->mesh->mode, 0, node->mesh->count);
+    }
 }
 
 void
-initialize_camera_3d(Camera_3D* camera, f32 near, f32 far, f32 aspect_ratio) {
+initialize_camera_3d(Camera_3D* camera, f32 fov, f32 near, f32 far, f32 aspect_ratio) {
+    camera->fov = fov;
     camera->near = near;
     camera->far = far;
     camera->aspect_ratio = aspect_ratio;
@@ -146,7 +160,7 @@ update_camera_3d(Camera_3D* camera, f32 aspect_ratio) {
     update_transform(&camera->transform);
 
     if (camera->is_dirty) {
-        camera->perspective_matrix = glm::perspective(90.0f,
+        camera->perspective_matrix = glm::perspective(camera->fov,
                                                       camera->aspect_ratio,
                                                       camera->near,
                                                       camera->far);
@@ -159,10 +173,9 @@ update_camera_3d(Camera_3D* camera, f32 aspect_ratio) {
     camera->is_dirty = false;
 }
 
-
 void
-initialize_fps_camera(Fps_Camera* camera, f32 near, f32 far, f32 sensitivity, f32 aspect_ratio) {
-    initialize_camera_3d(&camera->base, near, far, aspect_ratio);
+initialize_fps_camera(Fps_Camera* camera, f32 fov, f32 near, f32 far, f32 sensitivity, f32 aspect_ratio) {
+    initialize_camera_3d(&camera->base, fov, near, far, aspect_ratio);
     camera->sensitivity = sensitivity;
 }
 
@@ -204,30 +217,30 @@ update_fps_camera(Fps_Camera* camera, Input* input, int width, int height) {
     // Walking
     glm::vec3* pos = &transform->local_position;
 
-    float speed = 0.02f;
+    float speed = 0.04f;
     if (input->shift_key.ended_down) {
         speed = 0.08f;
     }
 
     f32 half_pi = glm::pi<f32>()/2.0f;
     glm::vec3 forward(cos(camera->rotation_x + half_pi)*speed, 0.0f, sin(camera->rotation_x + half_pi)*speed);
-    glm::vec3 right(cos(camera->rotation_x)*speed, 0.0f, sin(camera->rotation_x)*speed); 
+    glm::vec3 right(cos(camera->rotation_x)*speed, 0.0f, sin(camera->rotation_x)*speed);
 
     if (input->w_key.ended_down) {
         *pos += forward;
         transform->is_dirty = true;
     }
-    
+
     if (input->a_key.ended_down) {
         *pos += right;
         transform->is_dirty = true;
     }
-    
+
     if (input->s_key.ended_down) {
         *pos -= forward;
         transform->is_dirty = true;
     }
-    
+
     if (input->d_key.ended_down) {
         *pos -= right;
         transform->is_dirty = true;
@@ -280,10 +293,10 @@ begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_
     if (depth_testing) {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
-        
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
-        glFrontFace(GL_CW);
+
+        // glEnable(GL_CULL_FACE);
+        // glCullFace(GL_BACK);
+        // glFrontFace(GL_CCW);
     }
 
     // Set viewport
@@ -302,6 +315,7 @@ end_scene() {
     glDisable(GL_DEPTH_TEST);
     glLineWidth(1);
     glPointSize(1);
+    glDisable(GL_CULL_FACE);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
@@ -502,8 +516,10 @@ compile_phong_shader() {
     Phong_Shader shader = {};
     GLuint program = load_glsl_shader_from_file("phong.glsl");
     shader.base.program = program;
-    shader.u_object_color = glGetUniformLocation(program, "object_color");
-    shader.u_sampler = glGetUniformLocation(program, "sampler");
+    shader.u_diffuse_color = glGetUniformLocation(program, "material.diffuse_color");
+    shader.u_diffuse = glGetUniformLocation(program, "material.diffuse");
+    shader.u_specular = glGetUniformLocation(program, "material.specular");
+    shader.u_shininess = glGetUniformLocation(program, "material.shininess");
     setup_shader_base_uniforms(&shader.base);
     return shader;
 }

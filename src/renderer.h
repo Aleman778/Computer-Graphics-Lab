@@ -4,6 +4,7 @@ struct Mesh {
     GLuint  ibo;
     GLuint  vao;
     GLsizei count;
+    GLenum  mode; // e.g. GL_TRIANGLES
 };
 
 // NOTE(alexander): this defines the location index that all shaders should use!
@@ -57,11 +58,9 @@ struct Basic_Shader {
 
 struct Phong_Shader {
     Shader_Base base;
-    GLint u_object_color;
-    GLint u_sampler;
-    GLint u_ambient_color;
     GLint u_diffuse_color;
-    GLint u_specular_color;
+    GLint u_diffuse;
+    GLint u_specular;
     GLint u_shininess;
 };
 
@@ -84,12 +83,10 @@ struct Basic_Material {
 
 struct Phong_Material {
     Phong_Shader* shader;
-    glm::vec4 object_color;
-    glm::vec3 ambient_color;
     glm::vec3 diffuse_color;
-    glm::vec3 specular_color;
+    Texture* diffuse_map;
+    Texture* specular_map;
     f32 shininess;
-    Texture* main_texture;
 };
 
 struct Material {
@@ -160,14 +157,21 @@ void update_transform(Transform* transform);
 void draw_mesh();
 void draw_graphics_node(Graphics_Node* node, Camera_3D* camera);
 
-void initialize_camera_3d(Camera_3D* camera, f32 near=0.1f, f32 far=10000.0f, f32 aspect_ratio=1.0f);
+void initialize_camera_3d(Camera_3D* camera,
+                          f32 fov=glm::radians(90.0f),
+                          f32 near=0.1f,
+                          f32 far=10000.0f,
+                          f32 aspect_ratio=1.0f);
+
 void update_camera_3d(Camera_3D* camera, f32 aspect_ratio);
 
 void initialize_fps_camera(Fps_Camera* camera,
+                           f32 fov=glm::radians(90.0f),
                            f32 near=0.1f,
                            f32 far=10000.0f,
                            f32 senitivity=0.01f,
                            f32 aspect_ratio=1.0f);
+
 void update_fps_camera(Fps_Camera* camera, Input* input, int width, int height);
 
 void update_camera_2d(Camera_2D* camera, Input* input);

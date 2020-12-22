@@ -75,3 +75,39 @@ push_cuboid_mesh(Mesh_Builder* mb, glm::vec3 c, glm::vec3 d) {
               glm::vec3(c.x + d.x, c.y - d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f),
               glm::vec3(c.x + d.x, c.y - d.y, c.z - d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 }
+
+void
+push_sphere(Mesh_Builder* mb, glm::vec3 c, f32 r, int detail_x=32, int detail_y=32) {
+    printf("mb->vertices.size() = %zu\n", mb->vertices.size());
+    // detail_x *= 2;
+    for (int j = 0; j <= detail_y; j++) {
+        for (int i = 0; i < detail_x; i++) {
+            f32 phi   = glm::pi<f32>()*1.0f*((f32)j/(f32)detail_y) + glm::pi<f32>()/2.0f;
+            f32 theta = glm::pi<f32>()*2.0f*((f32)i/(f32)detail_x);
+
+            printf("phi = %f\n", phi);
+            printf("theta = %f\n", theta);
+            
+            glm::vec3 normal = glm::normalize(glm::vec3(sin(theta)*cos(phi), cos(theta)*cos(phi), sin(phi)));
+            glm::vec2 texcoord(0.0f); // TODO(alexander): wrap texcoords on sphere
+            glm::vec3 pos = normal*r + c;
+
+            Vertex v = { pos, texcoord, normal };
+
+            mb->vertices.push_back(v);
+            if (j != 0) {
+                mb->indices.push_back(detail_x*(j - 0) + i);
+                printf("index[%zu] = %u\n", mb->indices.size() - 1, mb->indices[mb->indices.size() - 1]);
+                
+                mb->indices.push_back(detail_x*(j - 1) + i);
+                printf("index[%zu] = %u\n", mb->indices.size() - 1, mb->indices[mb->indices.size() - 1]);
+             
+            }
+            
+        }
+        if (j != 0) {
+            mb->indices.push_back(detail_x*(j - 0));
+            mb->indices.push_back(detail_x*(j - 1));
+        }
+    }
+}

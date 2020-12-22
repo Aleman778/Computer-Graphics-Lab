@@ -7,12 +7,15 @@
 struct Simple_World_Scene {
     Mesh cuboid_mesh;
     Mesh ground_mesh;
+    Mesh sphere_mesh;
     
     Phong_Shader phong_shader;
 
     Texture texture_default;
-    Texture texture_snow_diffuse;
-    Texture texture_snow_specular;
+    Texture texture_snow_01_diffuse;
+    Texture texture_snow_01_specular;
+    Texture texture_snow_02_diffuse;
+    Texture texture_snow_02_specular;
 
     Graphics_Node nodes[100];
     
@@ -25,6 +28,7 @@ struct Simple_World_Scene {
     f32 fog_density;
     f32 fog_gradient;
 
+    bool enable_wireframe;
     bool show_gui;
     
     bool is_initialized;
@@ -43,17 +47,26 @@ initialize_scene(Simple_World_Scene* scene) {
     {
         Mesh_Builder mb = {};
         push_quad(&mb,
-                  glm::vec3(-100.0f, -1.0f, -100.0f), glm::vec2(0.0f,     0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-                  glm::vec3( 100.0f, -1.0f, -100.0f), glm::vec2(100.0f,   0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-                  glm::vec3( 100.0f, -1.0f,  100.0f), glm::vec2(100.0f, 100.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-                  glm::vec3(-100.0f, -1.0f,  100.0f), glm::vec2(0.0f,   100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                  glm::vec3(-100.0f, -1.0f,  100.0f), glm::vec2(0.0f,     0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+                  glm::vec3( 100.0f, -1.0f,  100.0f), glm::vec2(100.0f,   0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+                  glm::vec3( 100.0f, -1.0f, -100.0f), glm::vec2(100.0f, 100.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+                  glm::vec3(-100.0f, -1.0f, -100.0f), glm::vec2(0.0f,   100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         scene->ground_mesh = create_mesh_from_builder(&mb);
+    }
+    
+    {
+        Mesh_Builder mb = {};
+        push_sphere(&mb, glm::vec3(0.0f), 1.0f);
+        scene->sphere_mesh = create_mesh_from_builder(&mb);
+        scene->sphere_mesh.mode = GL_TRIANGLE_STRIP;
     }
 
     // Load textures
     scene->texture_default = generate_white_2d_texture();
-    scene->texture_snow_diffuse = load_2d_texture_from_file("snow_diffuse.png", true);
-    scene->texture_snow_specular = load_2d_texture_from_file("snow_specular.png", true);
+    scene->texture_snow_01_diffuse = load_2d_texture_from_file("snow_01_diffuse.png", true);
+    scene->texture_snow_01_specular = load_2d_texture_from_file("snow_01_specular.png", true);
+    scene->texture_snow_02_diffuse = load_2d_texture_from_file("snow_02_diffuse.png", true);
+    scene->texture_snow_02_specular = load_2d_texture_from_file("snow_02_specular.png", true);
 
     // Setup random number generator for generating cuboid positions
     std::random_device rd;
@@ -69,23 +82,27 @@ initialize_scene(Simple_World_Scene* scene) {
         node->material.Phong.shader = &scene->phong_shader;
 
         // Setup transform
-        glm::vec3 pos(dist(rng), dist(rng)*0.5f + 4.0fi, dist(rng));
-        initialize_transform(&node->transform, pos);
-        
         if (i == 0) {
+            initialize_transform(&node->transform);
             node->mesh = &scene->ground_mesh;
-            node->material.Phong.main_texture = &scene->texture_snow_diffuse;
-            node->material.Phong.object_color = glm::vec4(1.0f);
-        } else if (i == 1) {
-            node->mesh = &scene->cuboid_mesh;
-            node->transform.local_position = glm::vec3(0.0f, 1.0f, 0.0f);
-            node->transform.local_scale = glm::vec3(0.2f, 0.2f, 0.2f);
-            node->material.Phong.main_texture = &scene->texture_default;
-            node->material.Phong.object_color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            node->material.Phong.diffuse_color = glm::vec3(1.0f);
+            node->material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
+            node->material.Phong.specular_map = &scene->texture_snow_01_diffuse;
+            node->material.Phong.shininess = 8.0f;
         } else {
-            node->mesh = &scene->cuboid_mesh;
-            node->material.Phong.main_texture = &scene->texture_default;
-            node->material.Phong.object_color = primary_fg_color;
+            glm::vec3 pos(dist(rng), dist(rng)*0.5f + 4.0f, dist(rng));
+            initialize_transform(&node->transform, pos);
+        
+            node->mesh = &scene->sphere_mesh;
+            if (i == 1) {
+                node->material.Phong.diffuse_color = glm::vec3(1.0f);
+                node->transform.local_scale = glm::vec3(0.2f, 0.2f, 0.2f);
+            } else {
+                node->material.Phong.diffuse_color = primary_fg_color;
+            }
+            node->material.Phong.diffuse_map = &scene->texture_default;
+            node->material.Phong.specular_map = &scene->texture_default;
+            node->material.Phong.shininess = 32.0f;
         }
  
         node->material.shader = &scene->phong_shader.base;
@@ -97,12 +114,10 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->light_setup.ambient_intensity = 0.4f;
 
     // Sky color
-    scene->sky_color = glm::vec4(0.01f, 0.09f, 0.16f, 1.0f);
+    scene->sky_color = glm::vec3(0.01f, 0.04f, 0.08f);
     scene->fog_density = 0.065f;
     scene->fog_gradient = 2.0f;
-
-    // Set fixed position for the first movable cuboid
-    scene->nodes[0].transform.local_position = glm::vec3(0.0f, 0.0f, -1.0f);
+    scene->enable_wireframe = false;
 
     // Setup 3D camera
     initialize_fps_camera(&scene->camera);
@@ -151,6 +166,13 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         node->transform.is_dirty = true;
         scene->light_setup.position = node->transform.local_position;
     }
+    
+    if (scene->enable_wireframe) {
+        glLineWidth(3);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    } else {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
 
     // Render nodes
     for (int i = 0; i < array_count(scene->nodes); i++) {
@@ -163,9 +185,10 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
 
     // ImGui
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
-    ImGui::ColorEdit3("Sky Color:", &scene->sky_color.x);
+    ImGui::ColorEdit3("Sky Color", &scene->sky_color.x);
     ImGui::Text("Fog:");
     ImGui::SliderFloat("Density", &scene->fog_density, 0.01f, 0.5f);
     ImGui::SliderFloat("Gradient", &scene->fog_gradient, 1.0f, 10.0f);
+    ImGui::Checkbox("Wireframe mode", &scene->enable_wireframe);
     ImGui::End();
 }
