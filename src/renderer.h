@@ -160,7 +160,7 @@ void draw_graphics_node(Graphics_Node* node, Camera_3D* camera);
 void initialize_camera_3d(Camera_3D* camera,
                           f32 fov=glm::radians(90.0f),
                           f32 near=0.1f,
-                          f32 far=10000.0f,
+                          f32 far=100000.0f,
                           f32 aspect_ratio=1.0f);
 
 void update_camera_3d(Camera_3D* camera, f32 aspect_ratio);
@@ -168,7 +168,7 @@ void update_camera_3d(Camera_3D* camera, f32 aspect_ratio);
 void initialize_fps_camera(Fps_Camera* camera,
                            f32 fov=glm::radians(90.0f),
                            f32 near=0.1f,
-                           f32 far=10000.0f,
+                           f32 far=100000.0f,
                            f32 senitivity=0.01f,
                            f32 aspect_ratio=1.0f);
 

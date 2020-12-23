@@ -1,5 +1,6 @@
 #include "main.h"
 #include "geometry.cpp"
+#include "hdr_loader.cpp"
 #include "renderer.cpp"
 #include "koch_snowflake.cpp"    // Lab 1
 #include "triangulation.cpp"     // Lab 2
@@ -53,23 +54,23 @@ window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, 
     if (action == GLFW_REPEAT) return; // NOTE(alexander): don't care about repeat, breaks my input system!
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     Button_State* state = NULL;
-    
+
     switch (key) {
-        case GLFW_KEY_LEFT_ALT: 
+        case GLFW_KEY_LEFT_ALT:
         case GLFW_KEY_RIGHT_ALT: {
             state = &window->input.alt_key;
         } break;
-            
-        case GLFW_KEY_LEFT_SHIFT: 
+
+        case GLFW_KEY_LEFT_SHIFT:
         case GLFW_KEY_RIGHT_SHIFT: {
             state = &window->input.shift_key;
         } break;
-            
-        case GLFW_KEY_LEFT_CONTROL: 
+
+        case GLFW_KEY_LEFT_CONTROL:
         case GLFW_KEY_RIGHT_CONTROL: {
             state = &window->input.control_key;
         } break;
-            
+
         case GLFW_KEY_ESCAPE: {
             state = &window->input.escape_key;
         } break;
@@ -77,28 +78,28 @@ window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, 
         case GLFW_KEY_W: {
             state = &window->input.w_key;
         } break;
- 
+
         case GLFW_KEY_A: {
             state = &window->input.a_key;
         } break;
- 
+
         case GLFW_KEY_S: {
             state = &window->input.s_key;
         } break;
- 
+
         case GLFW_KEY_D: {
             state = &window->input.d_key;
         } break;
- 
+
         case GLFW_KEY_E: {
             state = &window->input.e_key;
         } break;
- 
+
         case GLFW_KEY_C: {
             state = &window->input.c_key;
         } break;
     }
-    
+
     if (state) {
         state->ended_down = action == GLFW_PRESS || action == GLFW_REPEAT;
         state->half_transition_count++;
@@ -178,7 +179,7 @@ read_entire_file_to_string(std::string filepath) {
     std::ifstream t(filepath);
     std::string str;
 
-    t.seekg(0, std::ios::end);   
+    t.seekg(0, std::ios::end);
     str.reserve(t.tellg());
     t.seekg(0, std::ios::beg);
 
@@ -280,11 +281,11 @@ main() {
                 case Scene_Koch_Snowflake: {
                     update_and_render_scene(koch_snowflake_scene, &window);
                 } break;
-                    
+
                 case Scene_Triangulation: {
                     update_and_render_scene(triangulation_scene, &window);
                 } break;
-                
+
                 case Scene_Basic_3D_Graphics: {
                     update_and_render_scene(basic_3d_graphics_scene, &window);
                 } break;
@@ -292,7 +293,7 @@ main() {
                 case Scene_Simple_World: {
                     update_and_render_scene(simple_world_scene, &window);
                 } break;
-                    
+
                 default: { // NOTE(alexander): invalid scene, just render background
                     glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
                     glClear(GL_COLOR_BUFFER_BIT);
@@ -353,7 +354,7 @@ main() {
 const char*
 find_resource_folder() {
     struct stat info;
- 
+
     if (stat("res", &info) == 0 && info.st_mode & S_IFDIR) {
         return "res/";
     }

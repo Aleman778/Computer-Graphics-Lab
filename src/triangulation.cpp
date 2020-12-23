@@ -544,15 +544,15 @@ calculate_distance_coloring(Triangulation_Scene* scene) {
     f32 k = 10.0f; // NOTE(alexander): constant between 1.0f and 20.0f, maybe use ImGui::Slider
 
     auto red = [xm, ym, d, k](f32 x) -> f32 {
-        return (glm::sin(k*glm::pi<f32>()*(d - x)/d) + 1.0f)/2.0f;
+        return (glm::sin(k*pi*(d - x)/d) + 1.0f)/2.0f;
     };
 
     auto green = [xm, ym, d, k](f32 x) -> f32 {
-        return (glm::sin(k*glm::pi<f32>()*(d - x)/d + 2*glm::pi<f32>()/3.0f) + 1.0f)/2.0f;
+        return (glm::sin(k*pi*(d - x)/d + 2*pi/3.0f) + 1.0f)/2.0f;
     };
 
     auto blue = [xm, ym, d, k](f32 x) -> f32 {
-        return (glm::sin(k*glm::pi<f32>()*(d - x)/d + 4*glm::pi<f32>()/3.0f) + 1.0f)/2.0f;
+        return (glm::sin(k*pi*(d - x)/d + 4*pi/3.0f) + 1.0f)/2.0f;
     };
 
     for (int i = 0; i < scene->triangulation.vertices.size(); i++) {

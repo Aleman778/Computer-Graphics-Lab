@@ -16,6 +16,8 @@ struct Simple_World_Scene {
     Texture texture_snow_01_specular;
     Texture texture_snow_02_diffuse;
     Texture texture_snow_02_specular;
+    Texture texture_night_sky;
+    Texture texture_test;
 
     Graphics_Node nodes[100];
     
@@ -62,11 +64,14 @@ initialize_scene(Simple_World_Scene* scene) {
     }
 
     // Load textures
-    scene->texture_default = generate_white_2d_texture();
-    scene->texture_snow_01_diffuse = load_2d_texture_from_file("snow_01_diffuse.png", true);
-    scene->texture_snow_01_specular = load_2d_texture_from_file("snow_01_specular.png", true);
-    scene->texture_snow_02_diffuse = load_2d_texture_from_file("snow_02_diffuse.png", true);
-    scene->texture_snow_02_specular = load_2d_texture_from_file("snow_02_specular.png", true);
+    scene->texture_default          = generate_white_2d_texture();
+    scene->texture_snow_01_diffuse  = load_2d_texture_from_file("snow_01_diffuse.png");
+    scene->texture_snow_01_specular = load_2d_texture_from_file("snow_01_specular.png");
+    scene->texture_snow_02_diffuse  = load_2d_texture_from_file("snow_02_diffuse.png");
+    scene->texture_snow_02_specular = load_2d_texture_from_file("snow_02_specular.png");
+    scene->texture_test             = load_2d_texture_from_file("test.png");
+    scene->texture_night_sky        = load_2d_texture_from_file("satara_night_no_lamps_1k.hdr");
+    // scene->texture_night_sky        = load_2d_texture_from_file("winter_lake_01_1k.hdr");
 
     // Setup random number generator for generating cuboid positions
     std::random_device rd;
@@ -88,7 +93,7 @@ initialize_scene(Simple_World_Scene* scene) {
             node->material.Phong.diffuse_color = glm::vec3(1.0f);
             node->material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
             node->material.Phong.specular_map = &scene->texture_snow_01_diffuse;
-            node->material.Phong.shininess = 8.0f;
+            node->material.Phong.shininess = 2.0f;
         } else {
             glm::vec3 pos(dist(rng), dist(rng)*0.5f + 4.0f, dist(rng));
             initialize_transform(&node->transform, pos);
@@ -96,13 +101,21 @@ initialize_scene(Simple_World_Scene* scene) {
             node->mesh = &scene->sphere_mesh;
             if (i == 1) {
                 node->material.Phong.diffuse_color = glm::vec3(1.0f);
+                node->material.Phong.diffuse_map = &scene->texture_default;
+                node->material.Phong.specular_map = &scene->texture_default;
                 node->transform.local_scale = glm::vec3(0.2f, 0.2f, 0.2f);
+            } else if (i == 2) {
+                node->material.Phong.diffuse_color = glm::vec3(1.0f);
+                node->material.Phong.diffuse_map = &scene->texture_night_sky;
+                node->material.Phong.specular_map = &scene->texture_default;
+                node->transform.local_position = glm::vec3(0.0f);
+                node->transform.local_scale = glm::vec3(100.0f);
             } else {
-                node->material.Phong.diffuse_color = primary_fg_color;
+                node->material.Phong.diffuse_color = glm::vec3(1.0f);
+                node->material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
+                node->material.Phong.specular_map = &scene->texture_snow_02_diffuse;
+                node->material.Phong.shininess = 2.0f;
             }
-            node->material.Phong.diffuse_map = &scene->texture_default;
-            node->material.Phong.specular_map = &scene->texture_default;
-            node->material.Phong.shininess = 32.0f;
         }
  
         node->material.shader = &scene->phong_shader.base;
@@ -115,7 +128,7 @@ initialize_scene(Simple_World_Scene* scene) {
 
     // Sky color
     scene->sky_color = glm::vec3(0.01f, 0.04f, 0.08f);
-    scene->fog_density = 0.065f;
+    scene->fog_density = 0.01f;
     scene->fog_gradient = 2.0f;
     scene->enable_wireframe = false;
 
@@ -165,6 +178,15 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         node->transform.local_position = glm::vec3(cos(x), 1.0f, sin(x));
         node->transform.is_dirty = true;
         scene->light_setup.position = node->transform.local_position;
+    }
+
+
+    // Move environment map to camera position
+    {
+        Graphics_Node* node = &scene->nodes[2];
+        node->transform.local_position = -scene->camera.base.transform.local_position;
+        node->transform.local_position.y = 10.0f;
+        node->transform.is_dirty = true;
     }
     
     if (scene->enable_wireframe) {

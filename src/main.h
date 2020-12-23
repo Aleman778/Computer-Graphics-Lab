@@ -58,6 +58,11 @@ static const glm::vec4 primary_bg_color   = glm::vec4(0.35f, 0.35f, 0.37f, 1.0f)
 static const glm::vec4 primary_fg_color   = glm::vec4(0.3f,  0.5f,  0.8f,  0.0f);
 static const glm::vec4 secondary_fg_color = glm::vec4(0.46f, 0.72f, 1.0f,  0.0f);
 
+static constexpr f32 quarter_pi = glm::pi<f32>()/4.0f;
+static constexpr f32 half_pi    = glm::pi<f32>()/2.0f;
+static constexpr f32 pi         = glm::pi<f32>();
+static constexpr f32 two_pi     = glm::pi<f32>()*2.0f;
+
 static bool is_running = true;
 
 enum Scene_Type {

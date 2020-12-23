@@ -79,7 +79,7 @@ vec3 apply_fog(in vec3 color) {
 
 void main() {
     // Texture color
-    vec3 diffuse_color  = vec3(texture2D(material.diffuse, fragment.texcoord)) * material.diffuse_color;
+    vec3 diffuse_color = vec3(texture2D(material.diffuse, fragment.texcoord)) * material.diffuse_color;
     vec3 specular_color = vec3(texture2D(material.specular, fragment.texcoord));
 
     // Ambient light
@@ -88,7 +88,7 @@ void main() {
     // Diffuse light
     vec3 light_direction = normalize(light_setup.position - fragment.world_position);
     float diffuse_amount = max(dot(fragment.normal, light_direction), 0.0f);
-    vec3 diffuse  = diffuse_amount * diffuse_color;
+    vec3 diffuse = diffuse_amount * diffuse_color;
 
     // Specular light
     vec3 view_direction = normalize(light_setup.view_position - fragment.world_position);

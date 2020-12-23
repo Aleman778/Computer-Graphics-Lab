@@ -222,7 +222,6 @@ update_fps_camera(Fps_Camera* camera, Input* input, int width, int height) {
         speed = 0.08f;
     }
 
-    f32 half_pi = glm::pi<f32>()/2.0f;
     glm::vec3 forward(cos(camera->rotation_x + half_pi)*speed, 0.0f, sin(camera->rotation_x + half_pi)*speed);
     glm::vec3 right(cos(camera->rotation_x)*speed, 0.0f, sin(camera->rotation_x)*speed);
 
@@ -348,41 +347,62 @@ load_2d_texture_from_file(const char* filename,
     path_stream << filename;
     std::string filepath = path_stream.str();
 
-    int width, height, num_channels;
-    u8* data = stbi_load(filepath.c_str(), &width, &height, &num_channels, 0);
-    if (!data) {
-        printf("cannot load image `%s` because %s\n", filepath.c_str(), stbi_failure_reason());
-        exit(0);
-    }
+    
 
-    Texture texture = {};
-    texture.target = GL_TEXTURE_2D;
-    glGenTextures(1, &texture.handle);
-    glBindTexture(texture.target, texture.handle);
-    glTexImage2D(texture.target, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glTexParameteri(texture.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    if (gen_mipmaps) {
-        glGenerateMipmap(texture.target);
-        glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-        if (GLEW_ARB_texture_filter_anisotropic && use_anisotropic_filtering) {
-            f32 amount = 0.0f;
-            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &amount);
-            amount = amount > max_anisotropy ? max_anisotropy : amount;
-            glTexParameterf(texture.target, GL_TEXTURE_MAX_ANISOTROPY, amount);
-            glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, 0);
-        } else {
-            glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, lod_bias);
+    if (filepath.length() > 4 && filepath.compare(filepath.length() - 4, 4, ".hdr") == 0) {
+        int width, height;
+        f32* data = load_hdr_image(filepath.c_str(), &width, &height);
+        if (!data) {
+            printf("cannot load HDR image `%s`\n", filepath.c_str());
+            exit(0);
         }
-    } else {
+        
+        Texture texture = {};
+        texture.target = GL_TEXTURE_2D;
+        glGenTextures(1, &texture.handle);
+        glBindTexture(texture.target, texture.handle);
+        glTexImage2D(texture.target, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, data);
         glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(texture.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        return texture;
+        
+    } else {
+        int width, height, num_channels;
+        u8* data = stbi_load(filepath.c_str(), &width, &height, &num_channels, 0);
+        if (!data) {
+            printf("cannot load image `%s` because %s\n", filepath.c_str(), stbi_failure_reason());
+            exit(0);
+        }
+
+        Texture texture = {};
+        texture.target = GL_TEXTURE_2D;
+        glGenTextures(1, &texture.handle);
+        glBindTexture(texture.target, texture.handle);
+        glTexImage2D(texture.target, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glTexParameteri(texture.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        if (gen_mipmaps) {
+            glGenerateMipmap(texture.target);
+            glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+            if (GLEW_ARB_texture_filter_anisotropic && use_anisotropic_filtering) {
+                f32 amount = 0.0f;
+                glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &amount);
+                amount = amount > max_anisotropy ? max_anisotropy : amount;
+                glTexParameterf(texture.target, GL_TEXTURE_MAX_ANISOTROPY, amount);
+                glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, 0);
+            } else {
+                glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, lod_bias);
+            }
+        } else {
+            glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        }
+
+        glBindTexture(texture.target, 0);
+
+        stbi_image_free(data);
+        return texture;
     }
-
-    glBindTexture(texture.target, 0);
-
-    stbi_image_free(data);
-    return texture;
 }
 
 static GLuint
