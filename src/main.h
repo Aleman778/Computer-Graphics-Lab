@@ -110,7 +110,6 @@ struct Window {
     bool is_focused;
 };
 
-#include "geometry.h"
 #include "renderer.h"
 
 bool was_pressed(Button_State* state);

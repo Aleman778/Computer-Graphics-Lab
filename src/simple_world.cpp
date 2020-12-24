@@ -8,8 +8,11 @@ struct Simple_World_Scene {
     Mesh cuboid_mesh;
     Mesh ground_mesh;
     Mesh sphere_mesh;
-    
+    Mesh cylinder_mesh;
+    Mesh cone_mesh;
+
     Phong_Shader phong_shader;
+    Sky_Shader sky_shader;
 
     Texture texture_default;
     Texture texture_snow_01_diffuse;
@@ -20,25 +23,26 @@ struct Simple_World_Scene {
     Texture texture_test;
 
     Graphics_Node nodes[100];
-    
+
     Light_Setup light_setup;
 
     glm::vec3 sky_color;
 
     Fps_Camera camera;
-    
+
     f32 fog_density;
     f32 fog_gradient;
 
     bool enable_wireframe;
     bool show_gui;
-    
+
     bool is_initialized;
 };
 
 static bool
 initialize_scene(Simple_World_Scene* scene) {
     scene->phong_shader = compile_phong_shader();
+    scene->sky_shader = compile_sky_shader();
 
     {
         Mesh_Builder mb = {};
@@ -55,12 +59,26 @@ initialize_scene(Simple_World_Scene* scene) {
                   glm::vec3(-100.0f, -1.0f, -100.0f), glm::vec2(0.0f,   100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         scene->ground_mesh = create_mesh_from_builder(&mb);
     }
-    
+
     {
         Mesh_Builder mb = {};
-        push_sphere(&mb, glm::vec3(0.0f), 1.0f);
+        push_sphere_triangle_strips(&mb, glm::vec3(0.0f), 1.0f);
         scene->sphere_mesh = create_mesh_from_builder(&mb);
         scene->sphere_mesh.mode = GL_TRIANGLE_STRIP;
+    }
+
+    {
+        Mesh_Builder mb = {};
+        push_cylinder_triangle_strips(&mb, glm::vec3(0.0f), 0.5f, 2.0f);
+        scene->cylinder_mesh = create_mesh_from_builder(&mb);
+        scene->cylinder_mesh.mode = GL_TRIANGLE_STRIP;
+    }
+
+    {
+        Mesh_Builder mb = {};
+        push_cone_triangle_strips(&mb, glm::vec3(0.0f), 0.5f, 2.0f);
+        scene->cone_mesh = create_mesh_from_builder(&mb);
+        scene->cone_mesh.mode = GL_TRIANGLE_STRIP;
     }
 
     // Load textures
@@ -73,6 +91,15 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->texture_night_sky        = load_2d_texture_from_file("satara_night_no_lamps_1k.hdr");
     // scene->texture_night_sky        = load_2d_texture_from_file("winter_lake_01_1k.hdr");
 
+    // Scene properties
+    scene->sky_color = glm::vec3(0.01f, 0.04f, 0.08f);
+    scene->fog_density = 0.01f;
+    scene->fog_gradient = 2.0f;
+    scene->enable_wireframe = false;
+    scene->light_setup.position = glm::vec3(0.0f, 1.0f, 0.0f);
+    scene->light_setup.color = glm::vec3(1.0f, 1.0f, 1.0f);
+    scene->light_setup.ambient_intensity = 0.4f;
+
     // Setup random number generator for generating cuboid positions
     std::random_device rd;
     std::mt19937 rng = std::mt19937(rd());
@@ -83,54 +110,55 @@ initialize_scene(Simple_World_Scene* scene) {
     for (int i = 0; i < array_count(scene->nodes); i++) {
         Graphics_Node* node = &scene->nodes[i];
         node->material = {};
-        node->material.type = Material_Type_Phong;
-        node->material.Phong.shader = &scene->phong_shader;
 
         // Setup transform
         if (i == 0) {
             initialize_transform(&node->transform);
             node->mesh = &scene->ground_mesh;
+
+            node->material.type = Material_Type_Phong;
             node->material.Phong.diffuse_color = glm::vec3(1.0f);
             node->material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
             node->material.Phong.specular_map = &scene->texture_snow_01_diffuse;
             node->material.Phong.shininess = 2.0f;
+            node->material.Phong.shader = &scene->phong_shader;
+            node->material.shader = &scene->phong_shader.base;
+
         } else {
             glm::vec3 pos(dist(rng), dist(rng)*0.5f + 4.0f, dist(rng));
             initialize_transform(&node->transform, pos);
-        
-            node->mesh = &scene->sphere_mesh;
+
+            node->mesh = &scene->cone_mesh;
             if (i == 1) {
+                node->material.type = Material_Type_Phong;
                 node->material.Phong.diffuse_color = glm::vec3(1.0f);
                 node->material.Phong.diffuse_map = &scene->texture_default;
                 node->material.Phong.specular_map = &scene->texture_default;
                 node->transform.local_scale = glm::vec3(0.2f, 0.2f, 0.2f);
+                node->material.Phong.shader = &scene->phong_shader;
+                node->material.shader = &scene->phong_shader.base;
+
             } else if (i == 2) {
-                node->material.Phong.diffuse_color = glm::vec3(1.0f);
-                node->material.Phong.diffuse_map = &scene->texture_night_sky;
-                node->material.Phong.specular_map = &scene->texture_default;
+                node->mesh = &scene->sphere_mesh;
+                node->material.type = Material_Type_Sky;
+                node->material.Sky.color = scene->sky_color;
+                node->material.Sky.map = &scene->texture_night_sky;
+                node->material.Sky.shader = &scene->sky_shader;
+                node->material.shader = &scene->sky_shader.base;
                 node->transform.local_position = glm::vec3(0.0f);
                 node->transform.local_scale = glm::vec3(100.0f);
+
             } else {
+                node->material.type = Material_Type_Phong;
                 node->material.Phong.diffuse_color = glm::vec3(1.0f);
                 node->material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
                 node->material.Phong.specular_map = &scene->texture_snow_02_diffuse;
                 node->material.Phong.shininess = 2.0f;
+                node->material.Phong.shader = &scene->phong_shader;
+                node->material.shader = &scene->phong_shader.base;
             }
         }
- 
-        node->material.shader = &scene->phong_shader.base;
     }
-
-    // Setup lgihting
-    scene->light_setup.position = glm::vec3(0.0f, 1.0f, 0.0f);
-    scene->light_setup.color = glm::vec3(1.0f, 1.0f, 1.0f);
-    scene->light_setup.ambient_intensity = 0.4f;
-
-    // Sky color
-    scene->sky_color = glm::vec3(0.01f, 0.04f, 0.08f);
-    scene->fog_density = 0.01f;
-    scene->fog_gradient = 2.0f;
-    scene->enable_wireframe = false;
 
     // Setup 3D camera
     initialize_fps_camera(&scene->camera);
@@ -156,19 +184,18 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     update_fps_camera(&scene->camera, &window->input, window->width, window->height);
     scene->light_setup.view_position = scene->camera.base.transform.local_position;
 
+    // Set sky color
+    {
+        Graphics_Node* node = &scene->nodes[1];
+    
+        }
+
     /***********************************************************************
      * Rendering
      ***********************************************************************/
 
     // Begin rendering our basic 3D scene
     begin_scene(glm::vec4(scene->sky_color, 1.0f), glm::vec4(0, 0, window->width, window->height), true);
-    
-    // Apply the basic shader
-    apply_shader(&scene->phong_shader.base,
-                 &scene->light_setup, 
-                 scene->sky_color, 
-                 scene->fog_density, 
-                 scene->fog_gradient);
 
     // Move the light
     {
@@ -180,25 +207,34 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         scene->light_setup.position = node->transform.local_position;
     }
 
-
     // Move environment map to camera position
     {
         Graphics_Node* node = &scene->nodes[2];
         node->transform.local_position = -scene->camera.base.transform.local_position;
         node->transform.local_position.y = 10.0f;
+        node->material.Sky.color = scene->sky_color;
         node->transform.is_dirty = true;
     }
-    
+
+    // Enable wireframe if enabled
     if (scene->enable_wireframe) {
-        glLineWidth(3);
+        glLineWidth(2);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     } else {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     // Render nodes
+    Material_Type prev_material = Material_Type_None;
     for (int i = 0; i < array_count(scene->nodes); i++) {
         Graphics_Node* node = &scene->nodes[i];
+        if (node->material.type != prev_material) {
+            apply_shader(node->material.shader,
+                         &scene->light_setup,
+                         scene->sky_color,
+                         scene->fog_density,
+                         scene->fog_gradient);
+        }
         draw_graphics_node(node, &scene->camera.base);
     }
 

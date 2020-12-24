@@ -49,7 +49,7 @@ create_mesh_from_builder(Mesh_Builder* mb) {
 inline void
 apply_shader(Shader_Base* shader, Light_Setup* light_setup, glm::vec3 sky_color, f32 fog_density, f32 fog_gradient) {
     glUseProgram(shader->program);
-    if (light_setup) {
+    if (light_setup && shader->u_light_setup.position != -1) {
         glUniform3fv(shader->u_light_setup.position, 1, glm::value_ptr(light_setup->position));
         glUniform3fv(shader->u_light_setup.view_position, 1, glm::value_ptr(light_setup->view_position));
         glUniform3fv(shader->u_light_setup.color, 1, glm::value_ptr(light_setup->color));
@@ -119,14 +119,22 @@ draw_graphics_node(Graphics_Node* node, Camera_3D* camera) {
 
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
-            glUniform1i(phong->shader->u_diffuse, 0);
+            glUniform1i(phong->shader->u_diffuse_map, 0);
             
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
-            glUniform1i(phong->shader->u_specular, 1);
+            glUniform1i(phong->shader->u_specular_map, 1);
 
             glUniform1f(phong->shader->u_shininess, phong->shininess);
             
+        } break;
+            
+        case Material_Type_Sky: {
+            Sky_Material* sky = &material->Sky;
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(sky->map->target, sky->map->handle);
+            glUniform1i(sky->shader->u_map, 0);
+            glUniform3fv(sky->shader->u_color, 1, glm::value_ptr(sky->color));
         } break;
     }
 
@@ -508,26 +516,30 @@ setup_shader_base_uniforms(Shader_Base* shader_base) {
 Basic_2D_Shader
 compile_basic_2d_shader() {
     Basic_2D_Shader shader = {};
-    shader.base.program = load_glsl_shader_from_file("basic_2d.glsl");
-    shader.base.u_mvp_transform = glGetUniformLocation(shader.base.program, "mvp_transform");
+    GLuint program = load_glsl_shader_from_file("basic_2d.glsl");
+    glUseProgram(program);
+    shader.base.program = program;
+    shader.base.u_mvp_transform = glGetUniformLocation(program, "mvp_transform");
     shader.base.u_sky_color     = -1;
     shader.base.u_fog_density   = -1;
     shader.base.u_fog_gradient  = -1;
-    shader.u_color              = glGetUniformLocation(shader.base.program, "color");
+    shader.u_color              = glGetUniformLocation(program, "color");
     return shader;
 }
 
 Basic_Shader
 compile_basic_shader() {
     Basic_Shader shader = {};
-    shader.base.program = load_glsl_shader_from_file("basic.glsl");
-    shader.base.u_mvp_transform = glGetUniformLocation(shader.base.program, "mvp_transform");
+    GLuint program = load_glsl_shader_from_file("basic.glsl");
+    glUseProgram(program);
+    shader.base.program = program;
+    shader.base.u_mvp_transform = glGetUniformLocation(program, "mvp_transform");
     shader.base.u_sky_color     = -1;
     shader.base.u_fog_density   = -1;
     shader.base.u_fog_gradient  = -1;
-    shader.u_color              = glGetUniformLocation(shader.base.program, "color");
-    shader.u_light_intensity    = glGetUniformLocation(shader.base.program, "light_intensity");
-    shader.u_light_attenuation  = glGetUniformLocation(shader.base.program, "light_attenuation");
+    shader.u_color              = glGetUniformLocation(program, "color");
+    shader.u_light_intensity    = glGetUniformLocation(program, "light_intensity");
+    shader.u_light_attenuation  = glGetUniformLocation(program, "light_attenuation");
     return shader;
 }
 
@@ -535,12 +547,28 @@ Phong_Shader
 compile_phong_shader() {
     Phong_Shader shader = {};
     GLuint program = load_glsl_shader_from_file("phong.glsl");
+    glUseProgram(program);
     shader.base.program = program;
     shader.u_diffuse_color = glGetUniformLocation(program, "material.diffuse_color");
-    shader.u_diffuse = glGetUniformLocation(program, "material.diffuse");
-    shader.u_specular = glGetUniformLocation(program, "material.specular");
+    shader.u_diffuse_map = glGetUniformLocation(program, "material.diffuse_map");
+    shader.u_specular_map = glGetUniformLocation(program, "material.specular_map");
     shader.u_shininess = glGetUniformLocation(program, "material.shininess");
     setup_shader_base_uniforms(&shader.base);
     return shader;
 }
 
+Sky_Shader
+compile_sky_shader() {
+    Sky_Shader shader = {};
+    GLuint program = load_glsl_shader_from_file("sky.glsl");
+    glUseProgram(program);
+    shader.base.program = program;
+    shader.base.u_mvp_transform = glGetUniformLocation(program, "mvp_transfor2m");
+    shader.base.u_sky_color    = -1;
+    shader.base.u_fog_density  = -1;
+    shader.base.u_fog_gradient = -1;
+    shader.base.u_light_setup.position = -1;
+    shader.u_map   = glGetUniformLocation(program, "material.map");
+    shader.u_color = glGetUniformLocation(program, "material.color");
+    return shader;
+}

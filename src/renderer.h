@@ -59,9 +59,15 @@ struct Basic_Shader {
 struct Phong_Shader {
     Shader_Base base;
     GLint u_diffuse_color;
-    GLint u_diffuse;
-    GLint u_specular;
+    GLint u_diffuse_map;
+    GLint u_specular_map;
     GLint u_shininess;
+};
+
+struct Sky_Shader {
+    Shader_Base base;
+    GLint u_map;
+    GLint u_color;
 };
 
 struct Light_Setup {
@@ -72,8 +78,10 @@ struct Light_Setup {
 };
 
 enum Material_Type {
+    Material_Type_None,
     Material_Type_Basic,
     Material_Type_Phong,
+    Material_Type_Sky,
 };
 
 struct Basic_Material {
@@ -89,11 +97,18 @@ struct Phong_Material {
     f32 shininess;
 };
 
+struct Sky_Material {
+    Sky_Shader* shader;
+    Texture* map;
+    glm::vec3 color;
+};
+
 struct Material {
     Material_Type type;
     union {
         Basic_Material Basic;
         Phong_Material Phong;
+        Sky_Material Sky;
     };
     Shader_Base* shader;
 };

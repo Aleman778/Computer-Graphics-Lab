@@ -11,10 +11,10 @@ layout(location=1) in vec2 texcoord;
 layout(location=2) in vec3 normal;
 
 out Fragment_Data {
-    out vec3 position;
-    out vec3 world_position;
-    out vec2 texcoord;
-    out vec3 normal;
+    vec3 position;
+    vec3 world_position;
+    vec2 texcoord;
+    vec3 normal;
 } fragment;
 
 uniform mat4 model_transform;
@@ -61,8 +61,8 @@ uniform float fog_gradient;
 // Material depandant uniforms
 struct Material {
     vec3 diffuse_color;
-    sampler2D diffuse;
-    sampler2D specular;
+    sampler2D diffuse_map;
+    sampler2D specular_map;
     float shininess;
 };
 
@@ -79,8 +79,8 @@ vec3 apply_fog(in vec3 color) {
 
 void main() {
     // Texture color
-    vec3 diffuse_color = vec3(texture2D(material.diffuse, fragment.texcoord)) * material.diffuse_color;
-    vec3 specular_color = vec3(texture2D(material.specular, fragment.texcoord));
+    vec3 diffuse_color = vec3(texture2D(material.diffuse_map, fragment.texcoord)) * material.diffuse_color;
+    vec3 specular_color = vec3(texture2D(material.specular_map, fragment.texcoord));
 
     // Ambient light
     vec3 ambient = light_setup.ambient_intensity * diffuse_color;
