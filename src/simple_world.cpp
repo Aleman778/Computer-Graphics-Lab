@@ -5,9 +5,10 @@
  ***************************************************************************/
 
 struct Simple_World_Scene {
-    Mesh cuboid_mesh;
+    Mesh cube_mesh;
     Mesh ground_mesh;
     Mesh sphere_mesh;
+    Mesh sky_mesh;
     Mesh cylinder_mesh;
     Mesh cone_mesh;
 
@@ -22,7 +23,7 @@ struct Simple_World_Scene {
     Texture texture_night_sky;
     Texture texture_test;
 
-    Graphics_Node nodes[100];
+    std::vector<Graphics_Node*> nodes;
 
     Light_Setup light_setup;
 
@@ -47,24 +48,21 @@ initialize_scene(Simple_World_Scene* scene) {
     {
         Mesh_Builder mb = {};
         push_cuboid_mesh(&mb, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
-        scene->cuboid_mesh = create_mesh_from_builder(&mb);
+        scene->cube_mesh = create_mesh_from_builder(&mb);
     }
 
     {
         Mesh_Builder mb = {};
-        push_quad(&mb,
-                  glm::vec3(-100.0f, -1.0f,  100.0f), glm::vec2(0.0f,     0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-                  glm::vec3( 100.0f, -1.0f,  100.0f), glm::vec2(100.0f,   0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-                  glm::vec3( 100.0f, -1.0f, -100.0f), glm::vec2(100.0f, 100.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-                  glm::vec3(-100.0f, -1.0f, -100.0f), glm::vec2(0.0f,   100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        push_flat_plane(&mb, glm::vec3(-50.0, -1.0, -50.0), 100, 100);
         scene->ground_mesh = create_mesh_from_builder(&mb);
     }
 
     {
         Mesh_Builder mb = {};
-        push_sphere_triangle_strips(&mb, glm::vec3(0.0f), 1.0f);
+        push_sphere(&mb, glm::vec3(0.0f), 1.0f);
         scene->sphere_mesh = create_mesh_from_builder(&mb);
-        scene->sphere_mesh.mode = GL_TRIANGLE_STRIP;
+        scene->sky_mesh = scene->sphere_mesh;
+        scene->sky_mesh.disable_culling = true; // since we are always inside the sky dome
     }
 
     {
@@ -80,7 +78,7 @@ initialize_scene(Simple_World_Scene* scene) {
         scene->cone_mesh = create_mesh_from_builder(&mb);
         scene->cone_mesh.mode = GL_TRIANGLE_STRIP;
     }
-
+    
     // Load textures
     scene->texture_default          = generate_white_2d_texture();
     scene->texture_snow_01_diffuse  = load_2d_texture_from_file("snow_01_diffuse.png");
@@ -88,11 +86,11 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->texture_snow_02_diffuse  = load_2d_texture_from_file("snow_02_diffuse.png");
     scene->texture_snow_02_specular = load_2d_texture_from_file("snow_02_specular.png");
     scene->texture_test             = load_2d_texture_from_file("test.png");
-    scene->texture_night_sky        = load_2d_texture_from_file("satara_night_no_lamps_1k.hdr");
+    scene->texture_night_sky        = load_2d_texture_from_file("satara_night_no_lamps_2k.hdr");
     // scene->texture_night_sky        = load_2d_texture_from_file("winter_lake_01_1k.hdr");
 
     // Scene properties
-    scene->sky_color = glm::vec3(0.01f, 0.04f, 0.08f);
+    scene->sky_color = glm::vec3(0.01f, 0.01f, 0.01f);
     scene->fog_density = 0.01f;
     scene->fog_gradient = 2.0f;
     scene->enable_wireframe = false;
@@ -106,60 +104,58 @@ initialize_scene(Simple_World_Scene* scene) {
     std::uniform_real_distribution<f32> dist(-10.0f, 10.0f);
     std::uniform_real_distribution<f32> comp(0.0f, 1.0f);
 
-    // Create all the graphics nodes
-    for (int i = 0; i < array_count(scene->nodes); i++) {
-        Graphics_Node* node = &scene->nodes[i];
+    // Sky
+    {
+        Graphics_Node* node = new Graphics_Node();
+        scene->nodes.push_back(node);
+
+        initialize_transform(&node->transform);
+        node->mesh = &scene->sky_mesh;
+        node->material.type = Material_Type_Sky;
+        node->material.Sky.color = scene->sky_color;
+        node->material.Sky.map = &scene->texture_night_sky;
+        node->material.Sky.shader = &scene->sky_shader;
+        node->material.shader = &scene->sky_shader.base;
+        node->transform.local_position = glm::vec3(0.0f);
+        node->transform.local_scale = glm::vec3(100.0f);
+    }
+    
+    // Ground
+    {
+        Graphics_Node* node = new Graphics_Node();
+        scene->nodes.push_back(node);
+        
         node->material = {};
-
-        // Setup transform
-        if (i == 0) {
-            initialize_transform(&node->transform);
-            node->mesh = &scene->ground_mesh;
-
-            node->material.type = Material_Type_Phong;
-            node->material.Phong.diffuse_color = glm::vec3(1.0f);
-            node->material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
-            node->material.Phong.specular_map = &scene->texture_snow_01_diffuse;
-            node->material.Phong.shininess = 2.0f;
-            node->material.Phong.shader = &scene->phong_shader;
-            node->material.shader = &scene->phong_shader.base;
-
-        } else {
-            glm::vec3 pos(dist(rng), dist(rng)*0.5f + 4.0f, dist(rng));
-            initialize_transform(&node->transform, pos);
-
-            node->mesh = &scene->cone_mesh;
-            if (i == 1) {
-                node->material.type = Material_Type_Phong;
-                node->material.Phong.diffuse_color = glm::vec3(1.0f);
-                node->material.Phong.diffuse_map = &scene->texture_default;
-                node->material.Phong.specular_map = &scene->texture_default;
-                node->transform.local_scale = glm::vec3(0.2f, 0.2f, 0.2f);
-                node->material.Phong.shader = &scene->phong_shader;
-                node->material.shader = &scene->phong_shader.base;
-
-            } else if (i == 2) {
-                node->mesh = &scene->sphere_mesh;
-                node->material.type = Material_Type_Sky;
-                node->material.Sky.color = scene->sky_color;
-                node->material.Sky.map = &scene->texture_night_sky;
-                node->material.Sky.shader = &scene->sky_shader;
-                node->material.shader = &scene->sky_shader.base;
-                node->transform.local_position = glm::vec3(0.0f);
-                node->transform.local_scale = glm::vec3(100.0f);
-
-            } else {
-                node->material.type = Material_Type_Phong;
-                node->material.Phong.diffuse_color = glm::vec3(1.0f);
-                node->material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
-                node->material.Phong.specular_map = &scene->texture_snow_02_diffuse;
-                node->material.Phong.shininess = 2.0f;
-                node->material.Phong.shader = &scene->phong_shader;
-                node->material.shader = &scene->phong_shader.base;
-            }
-        }
+        initialize_transform(&node->transform);
+        node->mesh = &scene->ground_mesh;
+                                
+        node->material.type = Material_Type_Phong;
+        node->material.Phong.diffuse_color = glm::vec3(1.0f);
+        node->material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
+        node->material.Phong.specular_map = &scene->texture_snow_01_specular;
+        node->material.Phong.shininess = 2.0f;
+        node->material.Phong.shader = &scene->phong_shader;
+        node->material.shader = &scene->phong_shader.base;
     }
 
+    // Snowman
+    for (int i = 0; i < 98; i++) {
+        Graphics_Node* node = new Graphics_Node();
+        scene->nodes.push_back(node);
+        
+        glm::vec3 pos(dist(rng), dist(rng)*0.5f + 4.0f, dist(rng));
+        initialize_transform(&node->transform, pos);
+        node->mesh = &scene->sphere_mesh;
+        node->material.type = Material_Type_Phong;
+        node->material.Phong.diffuse_color = glm::vec3(1.0f);
+        node->material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
+        node->material.Phong.specular_map = &scene->texture_snow_02_diffuse;
+        node->material.Phong.shininess = 2.0f;
+        node->material.Phong.shader = &scene->phong_shader;
+        node->material.shader = &scene->phong_shader.base;
+    }
+
+    
     // Setup 3D camera
     initialize_fps_camera(&scene->camera);
 
@@ -184,12 +180,6 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     update_fps_camera(&scene->camera, &window->input, window->width, window->height);
     scene->light_setup.view_position = scene->camera.base.transform.local_position;
 
-    // Set sky color
-    {
-        Graphics_Node* node = &scene->nodes[1];
-    
-        }
-
     /***********************************************************************
      * Rendering
      ***********************************************************************/
@@ -198,23 +188,24 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     begin_scene(glm::vec4(scene->sky_color, 1.0f), glm::vec4(0, 0, window->width, window->height), true);
 
     // Move the light
-    {
-        static f32 x = 0.0f;
-        x += 0.01f;
-        Graphics_Node* node = &scene->nodes[1];
-        node->transform.local_position = glm::vec3(cos(x), 1.0f, sin(x));
-        node->transform.is_dirty = true;
-        scene->light_setup.position = node->transform.local_position;
-    }
+    // {
+        // static f32 x = 0.0f;
+        // x += 0.01f;
+        // Graphics_Node* node = scene->nodes[1];
+        // node->transform.local_position = glm::vec3(cos(x), 1.0f, sin(x));
+        // node->transform.is_dirty = true;
+        // scene->light_setup.position = node->transform.local_position;
+    // }
 
-    // Move environment map to camera position
+    // Move sky to camera position
     {
-        Graphics_Node* node = &scene->nodes[2];
+        Graphics_Node* node = scene->nodes[0];
         node->transform.local_position = -scene->camera.base.transform.local_position;
-        node->transform.local_position.y = 10.0f;
         node->material.Sky.color = scene->sky_color;
         node->transform.is_dirty = true;
     }
+
+    
 
     // Enable wireframe if enabled
     if (scene->enable_wireframe) {
@@ -226,8 +217,8 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
 
     // Render nodes
     Material_Type prev_material = Material_Type_None;
-    for (int i = 0; i < array_count(scene->nodes); i++) {
-        Graphics_Node* node = &scene->nodes[i];
+    for (int i = 0; i < scene->nodes.size(); i++) {
+        Graphics_Node* node = scene->nodes[i];
         if (node->material.type != prev_material) {
             apply_shader(node->material.shader,
                          &scene->light_setup,

@@ -5,6 +5,7 @@ struct Mesh {
     GLuint  vao;
     GLsizei count;
     GLenum  mode; // e.g. GL_TRIANGLES
+    bool disable_culling;
 };
 
 // NOTE(alexander): this defines the location index that all shaders should use!

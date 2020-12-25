@@ -139,11 +139,21 @@ draw_graphics_node(Graphics_Node* node, Camera_3D* camera) {
     }
 
     // Draw mesh
+    assert(node->mesh && "missing mesh information");
     glBindVertexArray(node->mesh->vao);
+
+    if (node->mesh->disable_culling) {
+        glDisable(GL_CULL_FACE);
+    }
     if (node->mesh->ibo > 0) {
         glDrawElements(node->mesh->mode, node->mesh->count, GL_UNSIGNED_SHORT, 0);
     } else {
         glDrawArrays(node->mesh->mode, 0, node->mesh->count);
+    }
+    if (node->mesh->disable_culling) {
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
     }
 }
 
@@ -300,10 +310,10 @@ begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_
     if (depth_testing) {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
-
-        // glEnable(GL_CULL_FACE);
-        // glCullFace(GL_BACK);
-        // glFrontFace(GL_CCW);
+        
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
     }
 
     // Set viewport

@@ -16,7 +16,7 @@ typedef u8 RGBE[4];
 #define MINELEN 8      // minimum scanline length for encoding
 #define MAXELEN 0x7fff // maximum scanline length for encoding
 
-float convertComponent(int expo, int val) {
+float convert_component(int expo, int val) {
     float v = val / 256.0f;
     float d = (float) pow(2, expo);
     return v * d;
@@ -25,16 +25,16 @@ float convertComponent(int expo, int val) {
 static void workOnRGBE(RGBE* scan, int len, f32* data) {
     while (len-- > 0) {
         int expo = scan[0][E] - 128;
-        data[0] = convertComponent(expo, scan[0][R]);
-        data[1] = convertComponent(expo, scan[0][G]);
-        data[2] = convertComponent(expo, scan[0][B]);
+        data[0] = convert_component(expo, scan[0][R]);
+        data[1] = convert_component(expo, scan[0][G]);
+        data[2] = convert_component(expo, scan[0][B]);
         data += 3;
         scan++;
     }
 }
 
 static bool
-oldDecrunch(RGBE* scanline, int len, FILE* file) {
+old_decrunch(RGBE* scanline, int len, FILE* file) {
     int i;
     int rshift = 0;
 
@@ -65,18 +65,17 @@ oldDecrunch(RGBE* scanline, int len, FILE* file) {
     return true;
 }
 
-
 static bool
 decrunch(RGBE* scanline, int len, FILE* file) {
     int  i, j;
 
     if (len < MINELEN || len > MAXELEN)
-        return oldDecrunch(scanline, len, file);
+        return old_decrunch(scanline, len, file);
 
     i = fgetc(file);
     if (i != 2) {
         fseek(file, -1, SEEK_CUR);
-        return oldDecrunch(scanline, len, file);
+        return old_decrunch(scanline, len, file);
     }
 
     scanline[0][G] = fgetc(file);
@@ -86,7 +85,7 @@ decrunch(RGBE* scanline, int len, FILE* file) {
     if (scanline[0][G] != 2 || scanline[0][B] & 128) {
         scanline[0][R] = 2;
         scanline[0][E] = i;
-        return oldDecrunch(scanline + 1, len - 1, file);
+        return old_decrunch(scanline + 1, len - 1, file);
     }
 
     // read each component
@@ -154,7 +153,7 @@ load_hdr_image(const char* fileName, int* width, int* height) {
     *height = h;
 
     f32* output_data = new f32[w * h * 3];
-    
+
     RGBE *scanline = new RGBE[w];
     if (!scanline) {
         fclose(file);
