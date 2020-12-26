@@ -200,22 +200,60 @@ push_flat_plane(Mesh_Builder* mb,
     f32 dh = height/(f32) detail_y;
     usize base_index = mb->vertices.size();
 
-    for (int i = 0; i < detail_x; i++) {
-        for (int j = 0; j < detail_y; j++) {
-            glm::vec3 pos = glm::vec3(pt.x + i*dw, pt.y, pt.z + j*dh);
-            Vertex v = { pos, glm::vec2(i, j), normal };
+    for (int y = 0; y < detail_y; y++) {
+        for (int x = 0; x < detail_x; x++) {
+            glm::vec3 pos = glm::vec3(pt.x + x*dw, pt.y, pt.z + y*dh);
+            Vertex v = { pos, glm::vec2(x, y), normal };
             mb->vertices.push_back(v);
 
             // push quad
-            if (i != detail_x - 1 && j != detail_y - 1) {
-                mb->indices.push_back(base_index + j + i * detail_y);
-                mb->indices.push_back(base_index + j + i * detail_y + 1);
-                mb->indices.push_back(base_index + j + (i + 1) * detail_y);
-
-                mb->indices.push_back(base_index + j + i * detail_y + 1);
-                mb->indices.push_back(base_index + j + (i + 1) * detail_y + 1);
-                mb->indices.push_back(base_index + j + (i + 1) * detail_y);
+            if (x != detail_x - 1 && y != detail_y - 1) {
+                mb->indices.push_back(base_index + y + x * detail_y);
+                mb->indices.push_back(base_index + y + (x + 1) * detail_y);
+                mb->indices.push_back(base_index + y + x * detail_y + 1);
+ 
+                mb->indices.push_back(base_index + y + x * detail_y + 1);
+                mb->indices.push_back(base_index + y + (x + 1) * detail_y);
+                mb->indices.push_back(base_index + y + (x + 1) * detail_y + 1);
             }
         }
     }
+}
+
+static Height_Map
+generate_terrain_mesh(Mesh_Builder* mb,
+                      f32 width,
+                      f32 height,
+                      int detail_x=100,
+                      int detail_y=100,
+                      int octave=8,
+                      f32 persistance=0.33f,
+                      f32 max_terrain_height=10.0f,
+                      f32 min_terrain_height=-2.0f) {
+
+    push_flat_plane(mb,
+                    glm::vec3(0.0f, 0.0f, 0.0f), 
+                    width, 
+                    height, 
+                    glm::vec3(0.0f, 1.0f, 0.0f), 
+                    detail_x, 
+                    detail_y);
+
+    Height_Map terrain = {};
+    f32 terrain_height  = max_terrain_height - min_terrain_height;
+    terrain.scale_x = (f32) detail_x / width;
+    terrain.scale_y = (f32) detail_y / height;
+    terrain.width = detail_x;
+    terrain.height = detail_x*detail_y;
+    terrain.data = new f32[detail_x * detail_y];
+    
+    for (int i = 0; i < detail_x * detail_y; i++) {
+        f32 x = (i % detail_x)/20.0f;
+        f32 y = (i / detail_x)/20.0f;
+        terrain.data[i] = octave_perlin_noise(x, y, 1.0f, octave, persistance);
+        terrain.data[i] = terrain.data[i] * terrain_height * min_terrain_height;
+        mb->vertices[i].pos.y = terrain.data[i];
+    }
+    
+    return terrain;
 }

@@ -120,15 +120,15 @@ draw_graphics_node(Graphics_Node* node, Camera_3D* camera) {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
             glUniform1i(phong->shader->u_diffuse_map, 0);
-            
+
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
             glUniform1i(phong->shader->u_specular_map, 1);
 
             glUniform1f(phong->shader->u_shininess, phong->shininess);
-            
+
         } break;
-            
+
         case Material_Type_Sky: {
             Sky_Material* sky = &material->Sky;
             glActiveTexture(GL_TEXTURE0);
@@ -192,95 +192,6 @@ update_camera_3d(Camera_3D* camera, f32 aspect_ratio) {
 }
 
 void
-initialize_fps_camera(Fps_Camera* camera, f32 fov, f32 near, f32 far, f32 sensitivity, f32 aspect_ratio) {
-    initialize_camera_3d(&camera->base, fov, near, far, aspect_ratio);
-    camera->sensitivity = sensitivity;
-}
-
-void
-update_fps_camera(Fps_Camera* camera, Input* input, int width, int height) {
-    Transform* transform = &camera->base.transform;
-
-    // Looking around, whenever mouse is locked, left click in window (lock), escape (unlock).
-    if (input->mouse_locked) {
-        f32 delta_x = input->mouse_x - (f32) (width / 2);
-        f32 delta_y = input->mouse_y - (f32) (height / 2);
-
-        bool is_dirty = false;
-        if (delta_x > 0.1f || delta_x < -0.1f) {
-            camera->rotation_x += delta_x * camera->sensitivity;
-            is_dirty = true;
-        }
-
-        if (delta_y > 0.1f || delta_y < -0.1f) {
-            camera->rotation_y += delta_y * camera->sensitivity;
-            if (camera->rotation_y < -1.5f) {
-                camera->rotation_y = -1.5f;
-            }
-
-            if (camera->rotation_y > 1.2f) {
-                camera->rotation_y = 1.2f;
-            }
-            is_dirty = true;
-        }
-
-        if (is_dirty) {
-            glm::quat rot_x(glm::vec3(0.0f, camera->rotation_x, 0.0f));
-            glm::quat rot_y(glm::vec3(camera->rotation_y, 0.0f, 0.0f));
-            transform->local_rotation = rot_y * rot_x;
-            transform->is_dirty = true;
-        }
-    }
-
-    // Walking
-    glm::vec3* pos = &transform->local_position;
-
-    float speed = 0.04f;
-    if (input->shift_key.ended_down) {
-        speed = 0.08f;
-    }
-
-    glm::vec3 forward(cos(camera->rotation_x + half_pi)*speed, 0.0f, sin(camera->rotation_x + half_pi)*speed);
-    glm::vec3 right(cos(camera->rotation_x)*speed, 0.0f, sin(camera->rotation_x)*speed);
-
-    if (input->w_key.ended_down) {
-        *pos += forward;
-        transform->is_dirty = true;
-    }
-
-    if (input->a_key.ended_down) {
-        *pos += right;
-        transform->is_dirty = true;
-    }
-
-    if (input->s_key.ended_down) {
-        *pos -= forward;
-        transform->is_dirty = true;
-    }
-
-    if (input->d_key.ended_down) {
-        *pos -= right;
-        transform->is_dirty = true;
-    }
-
-    // Enable/ disable mouse locking
-    if (was_pressed(&input->left_mb)) {
-        input->mouse_locked = true;
-    }
-
-    if (was_pressed(&input->escape_key)){
-        input->mouse_locked = false;
-    }
-
-    // Update the actual camera matrices
-    f32 aspect_ratio = 0.0f;
-    if (width != 0 && height != 0) {
-        aspect_ratio = ((f32) width)/((f32) height);
-    }
-    update_camera_3d(&camera->base, aspect_ratio);
-}
-
-void
 update_camera_2d(Camera_2D* camera, Input* input) {
     // Camera panning
     if (input->right_mb.ended_down) {
@@ -310,7 +221,7 @@ begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_
     if (depth_testing) {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
-        
+
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
         glFrontFace(GL_CCW);
@@ -354,10 +265,10 @@ generate_white_2d_texture() {
 }
 
 Texture
-load_2d_texture_from_file(const char* filename,
+load_texture_2d_from_file(const char* filename,
                           bool gen_mipmaps,
                           f32 lod_bias,
-                          bool use_anisotropic_filtering, // requires gen_mipmaps=true
+                          bool use_anisotropic_filtering,
                           f32 max_anisotropy) {
     std::ostringstream path_stream;
     path_stream << res_folder;
@@ -365,8 +276,8 @@ load_2d_texture_from_file(const char* filename,
     path_stream << filename;
     std::string filepath = path_stream.str();
 
+    Texture texture = {};
     
-
     if (filepath.length() > 4 && filepath.compare(filepath.length() - 4, 4, ".hdr") == 0) {
         int width, height;
         f32* data = load_hdr_image(filepath.c_str(), &width, &height);
@@ -374,28 +285,56 @@ load_2d_texture_from_file(const char* filename,
             printf("cannot load HDR image `%s`\n", filepath.c_str());
             exit(0);
         }
-        
-        Texture texture = {};
-        texture.target = GL_TEXTURE_2D;
-        glGenTextures(1, &texture.handle);
-        glBindTexture(texture.target, texture.handle);
-        glTexImage2D(texture.target, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, data);
-        glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(texture.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        return texture;
-        
+        texture = create_texture_2d_from_data(data,
+                                              width,
+                                              height,
+                                              true,
+                                              gen_mipmaps,
+                                              lod_bias,
+                                              use_anisotropic_filtering,
+                                              max_anisotropy);
     } else {
+        
         int width, height, num_channels;
         u8* data = stbi_load(filepath.c_str(), &width, &height, &num_channels, 0);
         if (!data) {
             printf("cannot load image `%s` because %s\n", filepath.c_str(), stbi_failure_reason());
             exit(0);
         }
+        texture = create_texture_2d_from_data(data,
+                                              width,
+                                              height,
+                                              false,
+                                              gen_mipmaps,
+                                              lod_bias,
+                                              use_anisotropic_filtering,
+                                              max_anisotropy);
+        stbi_image_free(data);
+        
+    }
+    return texture;
+}
 
-        Texture texture = {};
-        texture.target = GL_TEXTURE_2D;
-        glGenTextures(1, &texture.handle);
-        glBindTexture(texture.target, texture.handle);
+Texture
+create_texture_2d_from_data(void* data,
+                            int width,
+                            int height,
+                            bool hdr_texture,
+                            bool gen_mipmaps,
+                            f32 lod_bias,
+                            bool use_anisotropic_filtering,
+                            f32 max_anisotropy) {
+    Texture texture = {};
+    texture.target = GL_TEXTURE_2D;
+    glGenTextures(1, &texture.handle);
+    glBindTexture(texture.target, texture.handle);
+
+    if (hdr_texture) {
+        glTexImage2D(texture.target, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, data);
+        glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(texture.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    } else {
         glTexImage2D(texture.target, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glTexParameteri(texture.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -409,18 +348,154 @@ load_2d_texture_from_file(const char* filename,
                 amount = amount > max_anisotropy ? max_anisotropy : amount;
                 glTexParameterf(texture.target, GL_TEXTURE_MAX_ANISOTROPY, amount);
                 glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, 0);
+
             } else {
                 glTexParameterf(texture.target, GL_TEXTURE_LOD_BIAS, lod_bias);
             }
         } else {
             glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         }
-
-        glBindTexture(texture.target, 0);
-
-        stbi_image_free(data);
-        return texture;
     }
+    
+    glBindTexture(texture.target, 0);
+    return texture;
+}
+
+static f32
+fade(f32 t) {
+    return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+static f32
+grad(int hash, f32 x, f32 y, f32 z) {
+    switch (hash & 0xf) {
+        case 0x0: return  x + y;
+        case 0x1: return -x + y;
+        case 0x2: return  x - y;
+        case 0x3: return -x - y;
+        case 0x4: return  x + z;
+        case 0x5: return -x + z;
+        case 0x6: return  x - z;
+        case 0x7: return -x - z;
+        case 0x8: return  y + z;
+        case 0x9: return -y + z;
+        case 0xa: return  y - z;
+        case 0xb: return -y - z;
+        case 0xc: return  y + x;
+        case 0xd: return -y + z;
+        case 0xe: return  y - x;
+        case 0xf: return -y - z;
+        default:  return 0; // never happens
+    }
+}
+
+f32
+lerp(f32 t, f32 a, f32 b) {
+    return a + t * (b - a);
+}
+
+static int*
+generate_perlin_permutations() {
+    std::random_device rd;
+    std::mt19937 rng = std::mt19937(rd());
+    std::uniform_real_distribution<f32> random(0.0f, 1.0f);
+
+    int* permutations = new int[512];
+    for (int i = 0; i < 256; i++) {
+        permutations[i] = i;
+    }
+    for (int i = 0; i < 256; i++) {
+        int index = i + random(rng) * (256 - i);
+        int temp = permutations[i];
+        permutations[i] = permutations[index];
+        permutations[index] = temp;
+    }
+    for (int i = 0; i < 256; i++) {
+        permutations[256+i] = permutations[i];
+    }
+    // printf("generated_permutations = {\n");
+    // for (int i = 0; i < 256; i++) {
+    //     printf("%d, ", permutations[i]);
+    //     if (i % 20 == 19) {
+    //         printf("\n");
+    //     }
+    // }
+    // printf("\n}\n");
+    return permutations;
+}
+
+f32 // NOTE: implementation based on https://adrianb.io/2014/08/09/perlinnoise.html
+perlin_noise(f32 x, f32 y, f32 z) {
+    static int* p = generate_perlin_permutations();
+
+    int xi = (int) x & 0xff;
+    int yi = (int) y & 0xff;
+    int zi = (int) z & 0xff;
+    x -= (int) x;
+    y -= (int) y;
+    z -= (int) z;
+    f32 u = fade(x);
+    f32 v = fade(y);
+    f32 w = fade(z);
+
+    int aaa = p[p[p[xi    ] + yi    ] + zi    ];
+    int aba = p[p[p[xi    ] + yi + 1] + zi    ];
+    int aab = p[p[p[xi    ] + yi    ] + zi + 1];
+    int abb = p[p[p[xi    ] + yi + 1] + zi + 1];
+    int baa = p[p[p[xi + 1] + yi    ] + zi    ];
+    int bba = p[p[p[xi + 1] + yi + 1] + zi    ];
+    int bab = p[p[p[xi + 1] + yi    ] + zi + 1];
+    int bbb = p[p[p[xi + 1] + yi + 1] + zi + 1];
+
+    f32 x1, x2, y1, y2;
+    x1 = lerp(u, grad(aaa, x, y,     z), grad(baa, x - 1, y,     z));
+    x2 = lerp(u, grad(aba, x, y - 1, z), grad(bba, x - 1, y - 1, z));
+    y1 = lerp(v, x1, x2);
+
+    x1 = lerp(u, grad(aab, x, y,     z - 1), grad(bab, x - 1, y,     z - 1));
+    x2 = lerp(u, grad(abb, x, y - 1, z - 1), grad(bbb, x - 1, y - 1, z - 1));
+    y2 = lerp(v, x1, x2);
+
+    return (lerp(w, y1, y2) + 1)/2;
+}
+
+f32
+octave_perlin_noise(f32 x, f32 y, f32 z, int octaves, f32 persistance) {
+    f32 total = 0.0f;
+    f32 frequency = 1.0f;
+    f32 amplitude = 1.0f;
+    f32 max_value = 0.0f;
+    for (int i = 0; i < octaves; i++) {
+        total += perlin_noise(x * frequency, y * frequency, z * frequency) * amplitude;
+        max_value += amplitude;
+        amplitude *= persistance;
+        frequency *= 2;
+    }
+
+    return total/max_value;
+}
+
+f32
+sample_point_at(Height_Map* map, f32 x, f32 y) {
+    int x0 = x*map->scale_x;
+    int y0 = y*map->scale_y;
+
+    if (x0 < 0) x0 = 0; if (x0 >= map->width)  x0 = map->width  - 1;
+    if (y0 < 0) y0 = 0; if (y0 >= map->height) y0 = map->height - 1;
+    
+    int x1 = x0 <= map->width  - 1 ? x0 + 1 : map->width  - 1;
+    int y1 = y0 <= map->height - 1 ? y0 + 1 : map->height - 1;
+
+    f32 h1 = map->data[x0+y0*map->width];
+    f32 h2 = map->data[x1+y0*map->width];
+    f32 h3 = map->data[x0+y1*map->width];
+    f32 h4 = map->data[x1+y1*map->width];
+
+    f32 u = x*map->scale_x - x0;
+    f32 v = y*map->scale_y - y0;
+    f32 hx0 = lerp(u, h1, h2);
+    f32 hx1 = lerp(u, h3, h4);
+    return lerp(v, hx0, hx1);
 }
 
 static GLuint

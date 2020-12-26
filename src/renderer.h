@@ -25,6 +25,14 @@ struct Mesh_Layout {
     usize       offset; // aka. pointer which makes no sense.
 };
 
+struct Height_Map {
+    f32* data;
+    f32 scale_x;
+    f32 scale_y;
+    int width;
+    int height;
+};
+
 struct Texture {
     GLenum target; // e.g. GL_TEXTURE_2D
     GLuint handle;
@@ -139,13 +147,6 @@ struct Camera_3D {
     bool is_dirty; // does projection and combined matrix need to be updated?
 };
 
-struct Fps_Camera {
-    Camera_3D base;
-    f32 rotation_x;
-    f32 rotation_y;
-    f32 sensitivity;
-};
-
 struct Camera_2D {
     f32 offset_x;
     f32 offset_y;
@@ -181,15 +182,6 @@ void initialize_camera_3d(Camera_3D* camera,
 
 void update_camera_3d(Camera_3D* camera, f32 aspect_ratio);
 
-void initialize_fps_camera(Fps_Camera* camera,
-                           f32 fov=glm::radians(90.0f),
-                           f32 near=0.1f,
-                           f32 far=100000.0f,
-                           f32 senitivity=0.01f,
-                           f32 aspect_ratio=1.0f);
-
-void update_fps_camera(Fps_Camera* camera, Input* input, int width, int height);
-
 void update_camera_2d(Camera_2D* camera, Input* input);
 
 void begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false);
@@ -197,12 +189,27 @@ void begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool d
 void end_scene();
 
 Texture generate_white_2d_texture();
-Texture load_2d_texture_from_file(const char* filepath,
+Texture load_texture_2d_from_file(const char* filepath,
                                   bool gen_mipmaps=true,
                                   f32 mipmap_bias=-0.8f,
                                   bool use_anisotropic_filtering=true, // requires gen_mipmaps=true
                                   f32 max_anisotropy=4.0f);
+Texture create_texture_2d_from_data(void* data,
+                                    int width,
+                                    int height,
+                                    bool hdr_texture=false,
+                                    bool gen_mipmaps=true,
+                                    f32 mipmap_bias=-0.8f,
+                                    bool use_anisotropic_filtering=true, // requires gen_mipmaps=true
+                                    f32 max_anisotropy=4.0f);
 
+f32 lerp(f32 t, f32 a, f32 b);
+
+f32 perlin_noise(f32 x, f32 y, f32 z);
+f32 octave_perlin_noise(f32 x, f32 y, f32 z, int octaves, f32 persistance);
+
+f32 sample_point_at(Height_Map* map, f32 x, f32 y);
+    
 Basic_2D_Shader compile_basic_2d_shader();
 Basic_Shader compile_basic_shader();
 Phong_Shader compile_phong_shader();
