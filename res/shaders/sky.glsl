@@ -45,5 +45,6 @@ uniform Material material;
 void main() {
     vec4 sky_color = vec4(material.color, 1.0f);
     vec4 texel_color = texture2D(material.map, fragment.texcoord);
-    frag_color = mix(texel_color, sky_color, fragment.texcoord.y + 0.24);
+    float factor = 1.0f - exp(-pow(fragment.texcoord.y + 0.55f, 40.0f));
+    frag_color = mix(texel_color, sky_color, factor);
 }

@@ -480,17 +480,24 @@ sample_point_at(Height_Map* map, f32 x, f32 y) {
     int x0 = x*map->scale_x;
     int y0 = y*map->scale_y;
 
-    if (x0 < 0) x0 = 0; if (x0 >= map->width)  x0 = map->width  - 1;
-    if (y0 < 0) y0 = 0; if (y0 >= map->height) y0 = map->height - 1;
+    if (x0 < 0) x0 = 0; if (x0 > map->width - 1)  x0 = map->width  - 1;
+    if (y0 < 0) y0 = 0; if (y0 > map->height - 1) y0 = map->height - 1;
     
-    int x1 = x0 <= map->width  - 1 ? x0 + 1 : map->width  - 1;
-    int y1 = y0 <= map->height - 1 ? y0 + 1 : map->height - 1;
+    int x1 = x0 + 1;
+    int y1 = y0 + 1;
+
+    if (x1 > map->width - 1)  x1 = map->width  - 1;
+    if (y1 > map->height - 1) y1 = map->height - 1;
+    
+    // printf("x0 = %d, y0 = %d, x1 = %d, y1 = %d\n", x0, y0, x1, y1);
 
     f32 h1 = map->data[x0+y0*map->width];
     f32 h2 = map->data[x1+y0*map->width];
     f32 h3 = map->data[x0+y1*map->width];
     f32 h4 = map->data[x1+y1*map->width];
 
+    // printf("h1 = %f, h2 = %f, h3 = %f, h4 = %f\n", h1, h2, h3, h4);
+    
     f32 u = x*map->scale_x - x0;
     f32 v = y*map->scale_y - y0;
     f32 hx0 = lerp(u, h1, h2);

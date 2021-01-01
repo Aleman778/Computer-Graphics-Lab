@@ -27,7 +27,6 @@ struct Simple_World_Scene {
     Texture texture_snow_01_specular;
     Texture texture_snow_02_diffuse;
     Texture texture_snow_02_specular;
-    Texture texture_snow_03_diffuse;
     Texture texture_sky;
 
     std::vector<Graphics_Node*> nodes;
@@ -105,9 +104,9 @@ update_player(Player* player, Input* input, Height_Map* terrain, int width, int 
 
     // Invisible wall collision
     if (pos->x >   0.0f) pos->x =   0.0f;
-    if (pos->x < -99.0f) pos->x = -99.0f;
+    if (pos->x < -99.5f) pos->x = -99.5f;
     if (pos->z >   0.0f) pos->z =   0.0f;
-    if (pos->z < -99.0f) pos->z = -99.0f;
+    if (pos->z < -99.5f) pos->z = -99.5f;
 
     // Gravity
     pos->y += 0.098f; // TODO(alexander): add to velocity
@@ -175,7 +174,6 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->texture_snow_01_specular = load_texture_2d_from_file("snow_01_specular.png");
     scene->texture_snow_02_diffuse  = load_texture_2d_from_file("snow_02_diffuse.png");
     scene->texture_snow_02_specular = load_texture_2d_from_file("snow_02_specular.png");
-    scene->texture_snow_03_diffuse  = load_texture_2d_from_file("snow_03_diffuse.png");
     scene->texture_sky              = load_texture_2d_from_file("satara_night_no_lamps_2k.hdr");
     // scene->texture_sky        = load_texture_2d_from_file("winter_lake_01_1k.hdr");
 
@@ -312,7 +310,13 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
 
     // ImGui
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
-    ImGui::ColorEdit3("Sky Color", &scene->sky_color.x);
+
+    ImGui::Text("Light Setup:");
+    ImGui::ColorEdit3("Light color", &scene->light_setup.color.x);
+
+    ImGui::Text("Sky:");
+    ImGui::ColorEdit3("Sky color", &scene->sky_color.x);
+    
     ImGui::Text("Fog:");
     ImGui::SliderFloat("Density", &scene->fog_density, 0.01f, 0.5f);
     ImGui::SliderFloat("Gradient", &scene->fog_gradient, 1.0f, 10.0f);
