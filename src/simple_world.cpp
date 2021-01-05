@@ -13,6 +13,7 @@ struct Player_Controller {
 
 struct Simple_World_Scene {
     World world;
+    Entity camera;
 
     Mesh mesh_cube;
     Mesh mesh_terrain;
@@ -42,7 +43,7 @@ struct Simple_World_Scene {
 };
 
 static void
-player_controller(Player_Controller* pc, Input* input, Height_Map* terrain, int width, int height) {
+player_controller(World* world, Player_Controller* pc, Input* input, Height_Map* terrain, int width, int height) {
     // Looking around, whenever mouse is locked, left click in window to lock, press escape to unlock.
     if (input->mouse_locked) {
         f32 delta_x = input->mouse_x - (f32) (width / 2);
@@ -74,10 +75,10 @@ player_controller(Player_Controller* pc, Input* input, Height_Map* terrain, int 
 
     glm::vec3 forward(cos(pc->rotation.x + half_pi)*speed, 0.0f, sin(pc->rotation.x + half_pi)*speed);
     glm::vec3 right(cos(pc->rotation.x)*speed, 0.0f, sin(pc->rotation.x)*speed);
-    if (input->w_key.ended_down) *pos += forward;
-    if (input->a_key.ended_down) *pos += right;
-    if (input->s_key.ended_down) *pos -= forward;
-    if (input->d_key.ended_down) *pos -= right;
+    if (input->w_key.ended_down) pc->position += forward;
+    if (input->a_key.ended_down) pc->position += right;
+    if (input->s_key.ended_down) pc->position -= forward;
+    if (input->d_key.ended_down) pc->position -= right;
 
     // Enable/ disable mouse locking
     if (was_pressed(&input->left_mb)) input->mouse_locked = true;
@@ -103,7 +104,7 @@ player_controller(Player_Controller* pc, Input* input, Height_Map* terrain, int 
     
     glm::mat4 transform = glm::translate(glm::mat4(1.0f), pc->position);
     transform *= glm::toMat4(rot_y * rot_x);
-    update_camera_3d(&pc->camera, aspect_ratio);
+    set_local_transform(world, pc->player, transform);
 }
 
 static bool
@@ -131,7 +132,7 @@ initialize_scene(Simple_World_Scene* scene) {
         push_sphere(&mb, glm::vec3(0.0f), 1.0f);
         scene->mesh_sphere = create_mesh_from_builder(&mb);
         scene->mesh_sky = scene->mesh_sphere;
-        scene->mesh_sky.disable_culling = true; // since we are always inside the sky dome
+        scene->mesh_sky.is_two_sided = true; // since we are always inside the sky dome
     }
 
     {
@@ -157,18 +158,15 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->texture_sky              = load_texture_2d_from_file("satara_night_no_lamps_2k.hdr");
     // scene->texture_sky        = load_texture_2d_from_file("winter_lake_01_1k.hdr");
 
-    // Scene properties
-    scene->sky_color = glm::vec3(0.01f, 0.01f, 0.01f);
-    scene->fog_density = 0.05f;
-    scene->fog_gradient = 2.0f;
-    scene->enable_wireframe = false;
-    scene->light_setup.position = glm::vec3(50.0f, 1.0f, 50.0f);
-    scene->light_setup.color = glm::vec3(1.0f, 1.0f, 1.0f);
-    scene->light_setup.ambient_intensity = 0.4f;
-    
-    // Initialize world properties
-    scene->world.clear_color = scene->sky_color;
+    // Scene and world properties
+    scene->world.clear_color = glm::vec4(0.01f, 0.01f, 0.01f, 1.0f);
     scene->world.depth_testing = true;
+    scene->world.fog_density = 0.05f;
+    scene->world.fog_gradient = 2.0f;
+    scene->world.light_setup.position = glm::vec3(50.0f, 1.0f, 50.0f);
+    scene->world.light_setup.color = glm::vec3(1.0f, 1.0f, 1.0f);
+    scene->world.light_setup.ambient_intensity = 0.4f;
+    scene->enable_wireframe = false;
 
     // Setup random number generator for generating cuboid positions
     std::random_device rd;
@@ -177,18 +175,26 @@ initialize_scene(Simple_World_Scene* scene) {
     std::uniform_real_distribution<f32> comp(0.0f, 1.0f);
 
     // Create world
-    Entity camera = spawn_entity(&scene->world);
-    set_local_transform(&scene->world, sky, glm::translate(0.0f, -1.0f, 0.0f));
+    scene->camera = spawn_entity(&scene->world);
+    glm::mat4 camera_transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+    set_local_transform(&scene->world, scene->camera, camera_transform);
 
     Entity player = spawn_entity(&scene->world);
-    set_parent(&scene->world, camera, player);
+    set_parent(&scene->world, scene->camera, player);
     scene->player_controller.player = player;
-    scene->player_controller.position.x = -50.0f;
-    scene->player_controller.position.z = -50.0f;
-    scene->player.sensitivity = 0.01f;
+    scene->player_controller.position.x = 50.0f;
+    scene->player_controller.position.z = 50.0f;
+    scene->player_controller.sensitivity = 0.01f;
 
+    Material sky_material = {};
+    sky_material.type = Material_Type_Sky;
+    sky_material.Sky.color = glm::vec3(scene->world.clear_color);
+    sky_material.Sky.map = &scene->texture_sky;
+    sky_material.Sky.shader = &scene->sky_shader;
+    sky_material.shader = &scene->sky_shader.base;
+        
     Entity sky = spawn_entity(&scene->world);
-    set_local_transform(&scene->world, sky, transform);
+    set_mesh(&scene->world, sky, scene->mesh_sky, sky_material);
 
     // set_mesh_renderer(&scene->world, sky, )
     
@@ -256,11 +262,18 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         }
     }
 
-    player_controller(&scene->player, &window->input, &scene->terrain, window->width, window->height);
-    update_scene(&scene->graph);
-    scene->light_setup.view_position = scene->player.camera.transform.local_position;
-    scene->world.clear_color = scene->sky_color;
+    player_controller(&scene->world,
+                      &scene->player_controller,
+                      &window->input,
+                      &scene->terrain,
+                      window->width,
+                      window->height);
     
+    adjust_camera_to_fill_window(&scene->world, scene->camera, window->width, window->height);
+
+    glm::mat4 view_matrix = get_world_transform(&scene->world, scene->camera);
+    scene->world.light_setup.view_position = glm::vec3(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f) * view_matrix);
+
     // Use wireframe if enabled
     if (scene->enable_wireframe) {
         glLineWidth(2);
@@ -274,14 +287,14 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::Text("Light Setup:");
-    ImGui::ColorEdit3("Light color", &scene->light_setup.color.x);
+    ImGui::ColorEdit3("Light color", &scene->world.light_setup.color.x);
 
     ImGui::Text("Sky:");
-    ImGui::ColorEdit3("Sky color", &scene->sky_color.x);
+    ImGui::ColorEdit3("Sky color", &scene->world.clear_color.x);
     
     ImGui::Text("Fog:");
-    ImGui::SliderFloat("Density", &scene->fog_density, 0.01f, 0.5f);
-    ImGui::SliderFloat("Gradient", &scene->fog_gradient, 1.0f, 10.0f);
+    ImGui::SliderFloat("Density", &scene->world.fog_density, 0.01f, 0.5f);
+    ImGui::SliderFloat("Gradient", &scene->world.fog_gradient, 1.0f, 10.0f);
     ImGui::Checkbox("Wireframe mode", &scene->enable_wireframe);
     ImGui::End();
 }

@@ -162,9 +162,9 @@ void update_camera_3d(Camera_3D* camera, f32 aspect_ratio);
 
 void update_camera_2d(Camera_2D* camera, Input* input);
 
-void begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false);
+void begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false);
 
-void end_scene();
+void end_frame();
 
 Texture generate_white_2d_texture();
 Texture load_texture_2d_from_file(const char* filepath,

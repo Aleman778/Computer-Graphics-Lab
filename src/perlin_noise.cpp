@@ -43,7 +43,7 @@ generate_perlin_permutations() {
         permutations[i] = i;
     }
     for (int i = 0; i < 256; i++) {
-        int index = i + random(rng) * (256 - i);
+        int index = i + (int) (random(rng) * (256 - i));
         int temp = permutations[i];
         permutations[i] = permutations[index];
         permutations[index] = temp;
@@ -119,8 +119,8 @@ octave_perlin_noise(f32 x, f32 y, f32 z, int octaves, f32 persistance) {
 
 f32
 sample_point_at(Height_Map* map, f32 x, f32 y) {
-    int x0 = x*map->scale_x;
-    int y0 = y*map->scale_y;
+    int x0 = (int) (x*map->scale_x);
+    int y0 = (int) (y*map->scale_y);
 
     if (x0 < 0) x0 = 0; if (x0 > map->width - 1)  x0 = map->width  - 1;
     if (y0 < 0) y0 = 0; if (y0 > map->height - 1) y0 = map->height - 1;

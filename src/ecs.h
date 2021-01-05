@@ -14,6 +14,11 @@ struct Entity {
     u32 id;
 };
 
+inline bool
+operator==(const Entity& a, const Entity& b) {
+    return a.id == b.id;
+}
+
 namespace std {
     template <>
     struct hash<Entity> {
@@ -28,8 +33,8 @@ namespace std {
  */
 struct Transform_Data {
     u8* buffer;
-    usize count;
-    usize capacity;
+    u32 count;
+    u32 capacity;
 
     Entity* entity;
     glm::mat4* local;
@@ -53,8 +58,8 @@ struct Transforms {
  */
 struct Mesh_Data {
     u8* buffer;
-    usize count;
-    usize capacity;
+    u32 count;
+    u32 capacity;
 
     Entity* entity;
     Mesh* mesh;
@@ -66,7 +71,7 @@ struct Mesh_Data {
  */
 struct Mesh_Renderers {
     std::unordered_map<Entity, u32> map;
-    Mesh_Data* data;
+    Mesh_Data data;
 };
 
 /**
@@ -76,20 +81,23 @@ struct Mesh_Renderers {
 struct Camera_Data {
     Entity entity;
     f32 fov;
+    f32 left;
+    f32 right;
+    f32 bottom;
+    f32 top;
     f32 near;
     f32 far;
     f32 aspect_ratio;
-    Transform transform;
     glm::mat4 projection_matrix; // projection * view (aka. camera transform)
-    glm::mat4 combined_matrix;   // projection * view (or camera transform matrix)
     glm::vec4 viewport;
     bool is_orthographic; // perspective (false), orthographic (true)
-    bool is_dirty; // does projection and combined matrix need to be updated?
 };
 
-
+/**
+ * Manages all the registered camera components.
+ */
 struct Cameras {
-    std::unordered_map<Entity, Camera> map;
+    std::unordered_map<Entity, Camera_Data> map;
 };
 
 /**
@@ -103,7 +111,7 @@ struct World {
     Mesh_Renderers mesh_renderers;
     Cameras cameras;
 
-    Camera_Data* main_camera;
+    Entity main_camera;
 
     Light_Setup light_setup;
     f32 fog_density;
@@ -125,4 +133,22 @@ void set_parent(World* world, Entity entity, Entity parent_entity);
 
 void set_mesh(World* world, Entity entity, Mesh mesh, Material material);
 
+void set_perspective(World* world,
+                     Entity entity,
+                     f32 fov=glm::radians(90.0f),
+                     f32 near=0.1f,
+                     f32 far=100000.0f,
+                     f32 aspect_ratio=1.0f,
+                     glm::vec4 viewport=glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+
+void set_orthographic(World* world,
+                      Entity entity,
+                      f32 left,
+                      f32 right,
+                      f32 top,
+                      f32 bottom,
+                      f32 near=0,
+                      f32 far=0,
+                      glm::vec4 viewport=glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+    
 void render_world(World* world);

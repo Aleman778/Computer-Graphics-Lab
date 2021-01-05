@@ -77,7 +77,7 @@ apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuat
 }
 
 void
-begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false) {
+begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing) {
     // Enable depth testing
     if (depth_testing) {
         glEnable(GL_DEPTH_TEST);
@@ -207,26 +207,6 @@ initialize_camera_3d(Camera_3D* camera, f32 fov, f32 near, f32 far, f32 aspect_r
 
 void
 update_camera_3d(Camera_3D* camera, f32 aspect_ratio) {
-    if (camera->aspect_ratio != aspect_ratio) {
-        camera->aspect_ratio = aspect_ratio;
-        camera->is_dirty = true;
-    }
-
-    bool is_transform_dirty = camera->transform.is_dirty;
-    update_transform(&camera->transform);
-
-    if (camera->is_dirty) {
-        camera->perspective_matrix = glm::perspective(camera->fov,
-                                                      camera->aspect_ratio,
-                                                      camera->near,
-                                                      camera->far);
-    }
-
-    if (is_transform_dirty || camera->is_dirty) {
-        camera->combined_matrix = camera->perspective_matrix * camera->transform.matrix;
-    }
-
-    camera->is_dirty = false;
 }
 
 void
