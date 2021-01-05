@@ -1,7 +1,9 @@
 #include "main.h"
+#include "perlin_noise.cpp"
 #include "geometry.cpp"
 #include "hdr_loader.cpp"
 #include "renderer.cpp"
+#include "ecs.cpp"
 #include "koch_snowflake.cpp"    // Lab 1
 #include "triangulation.cpp"     // Lab 2
 #include "basic_3d_graphics.cpp" // Lab 3

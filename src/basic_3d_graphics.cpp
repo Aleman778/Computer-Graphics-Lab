@@ -8,7 +8,7 @@ struct Basic_3D_Graphics_Scene {
     Mesh cuboid_mesh;
     Basic_Shader basic_shader;
 
-    Graphics_Node nodes[100];
+    World world;
 
     Camera_3D camera;
 

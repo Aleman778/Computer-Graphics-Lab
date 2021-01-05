@@ -13,6 +13,7 @@
 #include <functional>
 #include <unordered_set>
 #include <unordered_map>
+#include <deque>
 
 #include <glm.hpp>
 #include <gtx/hash.hpp>
@@ -111,6 +112,7 @@ struct Window {
 };
 
 #include "renderer.h"
+#include "ecs.h"
 
 bool was_pressed(Button_State* state);
 

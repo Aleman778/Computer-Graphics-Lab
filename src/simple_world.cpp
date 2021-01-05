@@ -4,14 +4,16 @@
  * Simple 3D world rendered using OpenGL
  ***************************************************************************/
 
-struct Player {
-    Camera_3D camera;
-    f32 rotation_x;
-    f32 rotation_y;
+struct Player_Controller {
+    Entity player;
+    glm::vec3 position;
+    glm::vec2 rotation;
     f32 sensitivity;
 };
 
 struct Simple_World_Scene {
+    World world;
+
     Mesh mesh_cube;
     Mesh mesh_terrain;
     Mesh mesh_sphere;
@@ -29,18 +31,9 @@ struct Simple_World_Scene {
     Texture texture_snow_02_specular;
     Texture texture_sky;
 
-    std::vector<Graphics_Node*> nodes;
-
-    Light_Setup light_setup;
-
-    glm::vec3 sky_color;
-
-    Player player;
+    Player_Controller player_controller;
 
     Height_Map terrain;
-
-    f32 fog_density;
-    f32 fog_gradient;
 
     bool enable_wireframe;
     bool show_gui;
@@ -49,50 +42,38 @@ struct Simple_World_Scene {
 };
 
 static void
-update_player(Player* player, Input* input, Height_Map* terrain, int width, int height) {
-    Transform* transform = &player->camera.transform;
-
-    // Looking around, whenever mouse is locked, left click in window (lock), escape (unlock).
+player_controller(Player_Controller* pc, Input* input, Height_Map* terrain, int width, int height) {
+    // Looking around, whenever mouse is locked, left click in window to lock, press escape to unlock.
     if (input->mouse_locked) {
         f32 delta_x = input->mouse_x - (f32) (width / 2);
         f32 delta_y = input->mouse_y - (f32) (height / 2);
 
         bool is_dirty = false;
         if (delta_x > 0.1f || delta_x < -0.1f) {
-            player->rotation_x += delta_x * player->sensitivity;
+            pc->rotation.x += delta_x * pc->sensitivity;
             is_dirty = true;
         }
 
         if (delta_y > 0.1f || delta_y < -0.1f) {
-            player->rotation_y += delta_y * player->sensitivity;
-            if (player->rotation_y < -1.5f) {
-                player->rotation_y = -1.5f;
+            pc->rotation.y += delta_y * pc->sensitivity;
+            if (pc->rotation.y < -1.5f) {
+                pc->rotation.y = -1.5f;
             }
 
-            if (player->rotation_y > 1.2f) {
-                player->rotation_y = 1.2f;
+            if (pc->rotation.y > 1.2f) {
+                pc->rotation.y = 1.2f;
             }
-            is_dirty = true;
-        }
-
-        if (is_dirty) {
-            glm::quat rot_x(glm::vec3(0.0f, player->rotation_x, 0.0f));
-            glm::quat rot_y(glm::vec3(player->rotation_y, 0.0f, 0.0f));
-            transform->local_rotation = rot_y * rot_x;
-            transform->is_dirty = true;
         }
     }
-
+    
     // Walking
-    glm::vec3* pos = &transform->local_position;
-
     float speed = 0.04f;
     if (input->shift_key.ended_down) {
         speed = 0.08f;
     }
 
-    glm::vec3 forward(cos(player->rotation_x + half_pi)*speed, 0.0f, sin(player->rotation_x + half_pi)*speed);
-    glm::vec3 right(cos(player->rotation_x)*speed, 0.0f, sin(player->rotation_x)*speed);
+    glm::vec3 forward(cos(pc->rotation.x + half_pi)*speed, 0.0f, sin(pc->rotation.x + half_pi)*speed);
+    glm::vec3 right(cos(pc->rotation.x)*speed, 0.0f, sin(pc->rotation.x)*speed);
     if (input->w_key.ended_down) *pos += forward;
     if (input->a_key.ended_down) *pos += right;
     if (input->s_key.ended_down) *pos -= forward;
@@ -103,27 +84,26 @@ update_player(Player* player, Input* input, Height_Map* terrain, int width, int 
     if (was_pressed(&input->escape_key)) input->mouse_locked = false;
 
     // Invisible wall collision
-    if (pos->x >   0.0f) pos->x =   0.0f;
-    if (pos->x < -99.5f) pos->x = -99.5f;
-    if (pos->z >   0.0f) pos->z =   0.0f;
-    if (pos->z < -99.5f) pos->z = -99.5f;
+    if (pc->position.x >   0.0f) pc->position.x =   0.0f;
+    if (pc->position.x < -99.5f) pc->position.x = -99.5f;
+    if (pc->position.z >   0.0f) pc->position.z =   0.0f;
+    if (pc->position.z < -99.5f) pc->position.z = -99.5f;
 
     // Gravity
-    pos->y += 0.098f; // TODO(alexander): add to velocity
+    pc->position.y += 0.098f; // TODO(alexander): add to velocity
 
     // Terrain collision
-    f32 terrain_height = -sample_point_at(terrain, -pos->x, -pos->z) - 1.0f;
-    if (pos->y > terrain_height) {
-        pos->y = terrain_height;
+    f32 terrain_height = -sample_point_at(terrain, -pc->position.x, -pc->position.z) - 1.0f;
+    if (pc->position.y > terrain_height) {
+        pc->position.y = terrain_height;
     }
 
-    // Update the camera
-    transform->is_dirty = true;
-    f32 aspect_ratio = 0.0f;
-    if (width != 0 && height != 0) {
-        aspect_ratio = ((f32) width)/((f32) height);
-    }
-    update_camera_3d(&player->camera, aspect_ratio);
+    glm::quat rot_x(glm::vec3(0.0f, pc->rotation.x, 0.0f));
+    glm::quat rot_y(glm::vec3(pc->rotation.y, 0.0f, 0.0f));
+    
+    glm::mat4 transform = glm::translate(glm::mat4(1.0f), pc->position);
+    transform *= glm::toMat4(rot_y * rot_x);
+    update_camera_3d(&pc->camera, aspect_ratio);
 }
 
 static bool
@@ -185,6 +165,10 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->light_setup.position = glm::vec3(50.0f, 1.0f, 50.0f);
     scene->light_setup.color = glm::vec3(1.0f, 1.0f, 1.0f);
     scene->light_setup.ambient_intensity = 0.4f;
+    
+    // Initialize world properties
+    scene->world.clear_color = scene->sky_color;
+    scene->world.depth_testing = true;
 
     // Setup random number generator for generating cuboid positions
     std::random_device rd;
@@ -192,61 +176,72 @@ initialize_scene(Simple_World_Scene* scene) {
     std::uniform_real_distribution<f32> dist(0.0f, 100.0f);
     std::uniform_real_distribution<f32> comp(0.0f, 1.0f);
 
-    // Sky
-    {
-        Graphics_Node* node = new Graphics_Node();
-        scene->nodes.push_back(node);
+    // Create world
+    Entity camera = spawn_entity(&scene->world);
+    set_local_transform(&scene->world, sky, glm::translate(0.0f, -1.0f, 0.0f));
 
-        initialize_transform(&node->transform);
-        node->mesh = &scene->mesh_sky;
-        node->material.type = Material_Type_Sky;
-        node->material.Sky.color = scene->sky_color;
-        node->material.Sky.map = &scene->texture_sky;
-        node->material.Sky.shader = &scene->sky_shader;
-        node->material.shader = &scene->sky_shader.base;
-        node->transform.local_position = glm::vec3(0.0f);
-        node->transform.local_scale = glm::vec3(100.0f);
-    }
-
-    {
-        Graphics_Node* node = new Graphics_Node();
-        scene->nodes.push_back(node);
-
-        node->material = {};
-        initialize_transform(&node->transform);
-        node->mesh = &scene->mesh_terrain;
-
-        node->material.type = Material_Type_Phong;
-        node->material.Phong.diffuse_color = glm::vec3(1.0f);
-        node->material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
-        node->material.Phong.specular_map = &scene->texture_snow_01_specular;
-        node->material.Phong.shininess = 2.0f;
-        node->material.Phong.shader = &scene->phong_shader;
-        node->material.shader = &scene->phong_shader.base;
-    }
-
-    for (int i = 0; i < 98; i++) {
-        Graphics_Node* node = new Graphics_Node();
-        scene->nodes.push_back(node);
-
-        glm::vec3 pos(dist(rng), 0.0f, dist(rng));
-        pos.y = sample_point_at(&scene->terrain, pos.x, pos.z) + 0.5f;
-        initialize_transform(&node->transform, pos);
-        node->mesh = &scene->mesh_sphere;
-        node->material.type = Material_Type_Phong;
-        node->material.Phong.diffuse_color = glm::vec3(1.0f);
-        node->material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
-        node->material.Phong.specular_map = &scene->texture_snow_02_diffuse;
-        node->material.Phong.shininess = 2.0f;
-        node->material.Phong.shader = &scene->phong_shader;
-        node->material.shader = &scene->phong_shader.base;
-    }
-
-    // Setup player and its camera
-    initialize_camera_3d(&scene->player.camera);
-    scene->player.camera.transform.local_position.x = -50.0f;
-    scene->player.camera.transform.local_position.z = -50.0f;
+    Entity player = spawn_entity(&scene->world);
+    set_parent(&scene->world, camera, player);
+    scene->player_controller.player = player;
+    scene->player_controller.position.x = -50.0f;
+    scene->player_controller.position.z = -50.0f;
     scene->player.sensitivity = 0.01f;
+
+    Entity sky = spawn_entity(&scene->world);
+    set_local_transform(&scene->world, sky, transform);
+
+    // set_mesh_renderer(&scene->world, sky, )
+    
+
+    // Sky
+    // {
+    //     Graphics_Node* node = new Graphics_Node();
+    //     scene->nodes.push_back(node);
+
+    //     initialize_transform(&node->transform);
+    //     node->mesh = scene->mesh_sky;
+    //     node->material.type = Material_Type_Sky;
+    //     node->material.Sky.color = scene->sky_color;
+    //     node->material.Sky.map = &scene->texture_sky;
+    //     node->material.Sky.shader = &scene->sky_shader;
+    //     node->material.shader = &scene->sky_shader.base;
+    //     node->transform.local_position = glm::vec3(0.0f);
+    //     node->transform.local_scale = glm::vec3(100.0f);
+    // }
+
+    // {
+    //     Graphics_Node* node = new Graphics_Node();
+    //     scene->nodes.push_back(node);
+
+    //     node->material = {};
+    //     initialize_transform(&node->transform);
+    //     node->mesh = scene->mesh_terrain;
+
+    //     node->material.type = Material_Type_Phong;
+    //     node->material.Phong.diffuse_color = glm::vec3(1.0f);
+    //     node->material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
+    //     node->material.Phong.specular_map = &scene->texture_snow_01_specular;
+    //     node->material.Phong.shininess = 2.0f;
+    //     node->material.Phong.shader = &scene->phong_shader;
+    //     node->material.shader = &scene->phong_shader.base;
+    // }
+
+    // for (int i = 0; i < 98; i++) {
+    //     Graphics_Node* node = new Graphics_Node();
+    //     scene->nodes.push_back(node);
+
+    //     glm::vec3 pos(dist(rng), 0.0f, dist(rng));
+    //     pos.y = sample_point_at(&scene->terrain, pos.x, pos.z) + 0.5f;
+    //     initialize_transform(&node->transform, pos);
+    //     node->mesh = scene->mesh_sphere;
+    //     node->material.type = Material_Type_Phong;
+    //     node->material.Phong.diffuse_color = glm::vec3(1.0f);
+    //     node->material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
+    //     node->material.Phong.specular_map = &scene->texture_snow_02_diffuse;
+    //     node->material.Phong.shininess = 2.0f;
+    //     node->material.Phong.shader = &scene->phong_shader;
+    //     node->material.shader = &scene->phong_shader.base;
+    // }
 
     scene->is_initialized = true;
     return true;
@@ -261,29 +256,12 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         }
     }
 
-    /***********************************************************************
-     * Update
-     ***********************************************************************/
-
-    update_player(&scene->player, &window->input, &scene->terrain, window->width, window->height);
+    player_controller(&scene->player, &window->input, &scene->terrain, window->width, window->height);
+    update_scene(&scene->graph);
     scene->light_setup.view_position = scene->player.camera.transform.local_position;
-
-    /***********************************************************************
-     * Rendering
-     ***********************************************************************/
-
-    // Begin rendering our basic 3D scene
-    begin_scene(glm::vec4(scene->sky_color, 1.0f), glm::vec4(0, 0, window->width, window->height), true);
-
-    // Move sky to camera position
-    {
-        Graphics_Node* node = scene->nodes[0];
-        node->transform.local_position = -scene->player.camera.transform.local_position;
-        node->material.Sky.color = scene->sky_color;
-        node->transform.is_dirty = true;
-    }
-
-    // Enable wireframe if enabled
+    scene->world.clear_color = scene->sky_color;
+    
+    // Use wireframe if enabled
     if (scene->enable_wireframe) {
         glLineWidth(2);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -291,24 +269,8 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
-    // Render nodes
-    Material_Type prev_material = Material_Type_None;
-    for (int i = 0; i < scene->nodes.size(); i++) {
-        Graphics_Node* node = scene->nodes[i];
-        if (node->material.type != prev_material) {
-            apply_shader(node->material.shader,
-                         &scene->light_setup,
-                         scene->sky_color,
-                         scene->fog_density,
-                         scene->fog_gradient);
-        }
-        draw_graphics_node(node, &scene->player.camera);
-    }
-
-    // Ending our basic 3D scene
-    end_scene();
-
-    // ImGui
+    render_world(&scene->world);
+    
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::Text("Light Setup:");

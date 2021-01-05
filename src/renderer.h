@@ -5,24 +5,7 @@ struct Mesh {
     GLuint  vao;
     GLsizei count;
     GLenum  mode; // e.g. GL_TRIANGLES
-    bool disable_culling;
-};
-
-// NOTE(alexander): this defines the location index that all shaders should use!
-enum Layout_Type {
-    Layout_Positions,  // 0
-    Layout_Texcoords,  // 1
-    Layout_Normals,    // 2
-    Layout_Colors,     // 3
-};
-
-struct Mesh_Layout {
-    Layout_Type location; // for simplicity always use the same index for all shaders.
-    GLint       size;
-    GLenum      type;
-    GLboolean   normalized;
-    GLsizei     stride;
-    usize       offset; // aka. pointer which makes no sense.
+    bool is_two_sided; // aka. disable culling?
 };
 
 struct Height_Map {
@@ -129,13 +112,6 @@ struct Transform {
     glm::mat4 matrix; // cached transform calculation
     bool is_dirty; // does matrix need to be updated?
 };
-
-struct Graphics_Node {
-    Mesh* mesh;
-    Material material;
-    Transform transform;
-};
-
 struct Camera_3D {
     f32 fov;
     f32 near;
@@ -171,8 +147,10 @@ void initialize_transform(Transform* transform,
                           glm::vec3 scale=glm::vec3(1.0f));
 void update_transform(Transform* transform);
 
-void draw_mesh();
-void draw_graphics_node(Graphics_Node* node, Camera_3D* camera);
+void draw_mesh(const Mesh& mesh,
+               const Material& material,
+               const glm::mat4 model_matrix,
+               const glm::mat4 view_proj_matrix);
 
 void initialize_camera_3d(Camera_3D* camera,
                           f32 fov=glm::radians(90.0f),
@@ -202,13 +180,6 @@ Texture create_texture_2d_from_data(void* data,
                                     f32 mipmap_bias=-0.8f,
                                     bool use_anisotropic_filtering=true, // requires gen_mipmaps=true
                                     f32 max_anisotropy=4.0f);
-
-f32 lerp(f32 t, f32 a, f32 b);
-
-f32 perlin_noise(f32 x, f32 y, f32 z);
-f32 octave_perlin_noise(f32 x, f32 y, f32 z, int octaves, f32 persistance);
-
-f32 sample_point_at(Height_Map* map, f32 x, f32 y);
     
 Basic_2D_Shader compile_basic_2d_shader();
 Basic_Shader compile_basic_shader();
