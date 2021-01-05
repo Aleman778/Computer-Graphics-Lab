@@ -48,12 +48,14 @@ struct Transforms {
     Transform_Data data;
 };
 
-struct Mesh_Renderer_Data {
+/**
+ * SoA packed array of mesh renderer data.
+ */
+struct Mesh_Data {
     u8* buffer;
     usize count;
     usize capacity;
 
-    // stored using SoA memory layout in buffer
     Entity* entity;
     Mesh* mesh;
     Material* material;
@@ -64,7 +66,7 @@ struct Mesh_Renderer_Data {
  */
 struct Mesh_Renderers {
     std::unordered_map<Entity, u32> map;
-    Mesh_Renderer_Data data;
+    Mesh_Data* data;
 };
 
 /**
@@ -87,8 +89,7 @@ struct Camera_Data {
 
 
 struct Cameras {
-    std::unordered_map<Entity, u32> map;
-    Camera_Data data;
+    std::unordered_map<Entity, Camera> map;
 };
 
 /**
@@ -120,5 +121,8 @@ void despawn_entity(World* world, Entity entity);
 
 void set_local_transform(World* world, Entity entity, const glm::mat4& m);
 void destroy_transform(World* world, Entity entity);
+void set_parent(World* world, Entity entity, Entity parent_entity);
+
+void set_mesh(World* world, Entity entity, Mesh mesh, Material material);
 
 void render_world(World* world);

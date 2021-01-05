@@ -228,7 +228,102 @@ destroy_transform(World* world, Entity entity) {
 }
 
 /***************************************************************************
- * Rendering world
+ * Mesh Renderer Component
+ ***************************************************************************/
+
+static void
+ensure_render_capacity(Mesh_Data* data, usize new_capacity) {
+    if (new_capacity > data->capacity) {
+        Transform_Data new_data;
+        new_data.capacity = data->capacity;
+        new_data.count = data->count;
+
+        if (new_data.capacity == 0) {
+            new_data.capacity = 100;
+        } else {
+            new_data.capacity *= 2;
+        }
+        if (new_capacity > new_data.capacity) new_data.capacity = new_capacity;
+
+        usize size = new_data.capacity*(sizeof(Entity) + 2*sizeof(glm::mat4));
+        new_data.buffer   = (u8*) malloc(size);
+        new_data.entity   = (Entity*)    new_data.buffer;
+        new_data.mesh     = (Mesh*)     (new_data.entity + new_data.capacity);
+        new_data.material = (Material*) (new_data.mesh + new_data.capacity);
+
+        if (data->buffer && data->count > 0) {
+            memcpy(new_data.entity, data->entity, data->count*sizeof(Entity));
+            memcpy(new_data.mesh, data->mesh, data->count*sizeof(Mesh));
+            memcpy(new_data.material, data->material, data->count*sizeof(Entity));
+            free(data->buffer);
+        }
+
+        *data = new_data;
+    }
+}
+
+static inline u32
+lookup_mesh(Mesh_Renderers* mesh_renderers, Entity entity) {
+    if (mesh_renderers->map.find(entity) == mesh_renderers->map.end()) {
+        return 0;
+    }
+    return mesh_renderers->map[entity];
+}
+
+void set_mesh(World* world, Entity entity, Mesh mesh, Material material) {
+    u32 index = lookup_mesh(world->mesh_renderers, entity);
+    if (!index) {
+        index = mesh_renderers->data.count + 1;
+        mesh_renderers->map[entity] = index;
+        ensure_mesh_capacity(&mesh_renderers->data, index + 1);
+    }
+
+    mesh_renderers->data.entity[index] = entity;
+    mesh_renderers->data.mesh[index] = mesh;
+    mesh_renderers->data.material[index] = material;
+    mesh_renderers->data.count++;
+}
+
+// TODO(alexander): delete mesh component
+
+/***************************************************************************
+ * Camera Component
+ ***************************************************************************/
+
+static inline Camera_Data*
+lookup_camera(Cameras* cameras, Entity entity) {
+    if (cameras->map.find(entity) == cameras->map.end()) {
+        return NULL;
+    }
+    return &cameras->map[entity];
+}
+
+void set_perspective(World* world,
+                     Entity entity,
+                     f32 fov=glm::radians(90.0f),
+                     f32 near=0.1f,
+                     f32 far=100000.0f,
+                     f32 aspect_ratio=1.0f) {
+    Camera_Data data = cameras->map[entity];
+    data.fov = fov;
+    data.near = near;
+    data.far = far;
+    data.aspect_ratio = aspect_ratio;
+    data.
+}
+
+void set_camera_aspect_ratio(World* world, Entity entity, f32 aspect_ratio) {
+    Camera_Data* data = lookup_camera(world->cameras, entity);
+    if (!data) return;
+    
+    data.aspect_ratio = fov;
+    
+}
+
+// TODO(alexander): delete camera component
+
+/***************************************************************************
+ * Rendering World
  ***************************************************************************/
 
 void
@@ -239,11 +334,13 @@ render_world(World* world) {
 
     glm::mat4 view_proj_matrix = world->main_camera->combined_matrix;
     Material_Type prev_material = Material_Type_None;
-    Mesh_Renderer_Data* rendering_data = &world->mesh_renderers.data;
+    Mesh_Data* rendering_data = world->mesh_renderers.data;
     Transform_Data* transform_data = &world->transforms.data;
 
     for (u32 i = 0; i < rendering_data->count; i++) {
         Entity entity = rendering_data->entity[i];
+        if (!is_alive(world, entity)) continue;
+
         int transform_index = lookup_transform(&world->transforms, entity);
         glm::mat4 model_matrix;
         if (transform_index) {
@@ -252,8 +349,8 @@ render_world(World* world) {
             model_matrix = glm::mat4(1.0f);
         }
 
-        Material material = rendering_data->material[i];
-        Mesh mesh = rendering_data->mesh[i];
+        Material material = rendering_data[i].material;
+        Mesh mesh = rendering_data[i].mesh;
 
         if (material.type != prev_material) {
             apply_shader(material.shader,
