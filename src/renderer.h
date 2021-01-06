@@ -113,6 +113,7 @@ struct Transform {
     glm::mat4 matrix; // cached transform calculation
     bool is_dirty; // does matrix need to be updated?
 };
+
 struct Camera_3D {
     f32 fov;
     f32 near;

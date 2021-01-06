@@ -51,9 +51,35 @@ despawn_entity(World* world, Entity entity) {
     destroy_transform(world, entity);
 }
 
+Entity
+copy_entity(World* world, Entity entity) {
+    assert(is_alive(world, entity));
+    Entity copy = spawn_entity(world);
+    copy_transform(world, entity, copy);
+    copy_mesh(world, entity, copy);
+    return copy;
+}
+
 inline bool
 is_alive(World* world, Entity entity) {
     return world->generations[get_entity_index(entity)] == get_entity_generation(entity);
+}
+
+/***************************************************************************
+ * Debug Name Component
+ ***************************************************************************/
+
+std::string
+lookup_name(World* world, Entity entity) {
+    if (world->names.map.find(entity) != world->names.map.end()) {
+        return world->names.map[entity];
+    }
+    return std::string();
+}
+
+void
+set_name(World* world, Entity entity, const char* name) {
+    world->names.map[entity] = std::string(name);
 }
 
 /***************************************************************************
@@ -126,7 +152,7 @@ create_transform(Transforms* transforms, Entity entity) {
 
 static void
 set_transform(Transform_Data* data, const glm::mat4& parent, u32 index) {
-    data->world[index] = data->local[index] * parent;
+    data->world[index] = parent * data->local[index];
 
     u32 child = data->first_child[index];
     assert(child != index && "parent child cycle detected");
@@ -202,6 +228,45 @@ set_parent(World* world, Entity entity, Entity parent_entity) {
 
     // Update the childs transform
     set_transform(data, data->world[parent], child);
+}
+
+void
+copy_transform(World* world, Entity entity, Entity copied_entity) {
+    Transform_Data* data = &world->transforms.data;
+    u32 i = lookup_transform(&world->transforms, entity);
+    if (!i) return;
+
+    u32 copy = lookup_transform(&world->transforms, copied_entity);
+    if (!copy) copy = create_transform(&world->transforms, copied_entity);
+
+    data->entity[copy]       = data->entity[i];
+    data->local[copy]        = data->local[i];
+    data->world[copy]        = data->world[i];
+    data->parent[copy]       = 0;
+
+    if (data->first_child[i]) {
+        u32 child = data->first_child[i];
+        u32 child_copy = 0;
+        if (child) {
+            Entity entity_copy = copy_entity(world, data->entity[child]);
+            child_copy = lookup_transform(&world->transforms, entity_copy);
+            assert(child_copy && "unexpected missing child node");
+            data->first_child[copy] = child_copy;
+            data->parent[child_copy] = copy;
+        }
+
+        child = data->next_sibling[child];
+        while (child && child_copy) {
+            Entity entity_copy = copy_entity(world, data->entity[child]);
+            u32 next_child_copy = lookup_transform(&world->transforms, entity_copy);
+            assert(next_child_copy && "unexpected missing child node");
+            data->next_sibling[child_copy] = next_child_copy;
+            data->prev_sibling[next_child_copy] = child_copy;
+
+            child = data->next_sibling[child];
+            child_copy = next_child_copy;
+        }
+    }
 }
 
 void
@@ -296,6 +361,18 @@ set_mesh(World* world, Entity entity, Mesh mesh, Material material) {
     mesh_renderers->data.mesh[index] = mesh;
     mesh_renderers->data.material[index] = material;
     mesh_renderers->data.count++;
+}
+
+void
+copy_mesh(World* world, Entity entity, Entity copied_entity) {
+    Mesh_Renderers* mesh_renderers = &world->mesh_renderers;
+    u32 index = lookup_mesh(mesh_renderers, entity);
+    if (index) {
+        set_mesh(world,
+                 copied_entity,
+                 mesh_renderers->data.mesh[index],
+                 mesh_renderers->data.material[index]);
+    }
 }
 
 // TODO(alexander): delete mesh component

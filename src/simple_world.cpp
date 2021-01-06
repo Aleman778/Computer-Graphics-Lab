@@ -95,7 +95,7 @@ player_controller(World* world, Player_Controller* pc, Input* input, Height_Map*
     pc->position.y += 0.098f; // TODO(alexander): add to velocity
 
     // Terrain collision
-    f32 terrain_height = -sample_point_at(terrain, -pc->position.x, -pc->position.z) - 1.0f;
+    f32 terrain_height = -sample_point_at(terrain, -pc->position.x, -pc->position.z) - 1.8f;
     if (pc->position.y > terrain_height) {
         pc->position.y = terrain_height;
     }
@@ -186,16 +186,19 @@ initialize_scene(Simple_World_Scene* scene) {
     std::uniform_real_distribution<f32> comp(0.0f, 1.0f);
 
     // Create world
-    scene->camera = spawn_entity(&scene->world);
-    scene->world.main_camera = scene->camera;
+    Entity camera = spawn_entity(&scene->world);
+    set_name(&scene->world, camera, "Player");
+    scene->camera = camera;
+    scene->world.main_camera = camera;
     glm::mat4 camera_transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-    set_local_transform(&scene->world, scene->camera, camera_transform);
-    set_perspective(&scene->world, scene->camera);
+    set_local_transform(&scene->world, camera, camera_transform);
+    set_perspective(&scene->world, camera);
 
     Entity player = spawn_entity(&scene->world);
+    set_name(&scene->world, player, "Player");
     set_local_transform(&scene->world, player, camera_transform);
     scene->player_controller.player = player;
-    scene->player_controller.camera = scene->camera;
+    scene->player_controller.camera = camera;
     scene->player_controller.position.x = -50.0f;
     scene->player_controller.position.y =  50.0f;
     scene->player_controller.position.z = -50.0f;
@@ -207,6 +210,7 @@ initialize_scene(Simple_World_Scene* scene) {
     sky_material.Sky.shader = &scene->sky_shader;
 
     Entity sky = spawn_entity(&scene->world);
+    set_name(&scene->world, sky, "Sky");
     set_mesh(&scene->world, sky, scene->mesh_sky, sky_material);
 
     Material snow_ground_material = {};
@@ -218,18 +222,81 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_ground_material.Phong.shader = &scene->phong_shader;
 
     Entity terrain = spawn_entity(&scene->world);
+    set_name(&scene->world, terrain, "Terrain");
     set_mesh(&scene->world, terrain, scene->mesh_terrain, snow_ground_material);
 
     Material snow_material = snow_ground_material;
     snow_material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
     snow_material.Phong.specular_map = &scene->texture_snow_02_specular;
 
-    for (int i = 0; i < 80; i++) {
-        Entity snowball = spawn_entity(&scene->world);
+    // Create a snowman
+    Entity snowman = spawn_entity(&scene->world);
+    {
+        set_name(&scene->world, snowman, "Snowman");
+        set_mesh(&scene->world, snowman, scene->mesh_sphere, snow_material);
+        
+        Transform tr = {};
+        tr.local_position = glm::vec3(0.0f, -1000.0f, 0.0f);
+        tr.local_scale = glm::vec3(0.2f);
+        tr.is_dirty = true;
+        update_transform(&tr);
+        set_local_transform(&scene->world, snowman, tr.matrix);
+
+        Entity snowman_chest = spawn_entity(&scene->world);
+        set_name(&scene->world, snowman_chest, "Snowman Chest");
+        set_mesh(&scene->world, snowman_chest, scene->mesh_sphere, snow_material);
+        set_parent(&scene->world, snowman_chest, snowman);
+
+        tr.local_position = glm::vec3(0.0f, 1.3f, 0.0f);
+        tr.local_scale = glm::vec3(0.7f);
+        tr.is_dirty = true;
+        update_transform(&tr);
+        set_local_transform(&scene->world, snowman_chest, tr.matrix);
+
+        Entity snowman_head = spawn_entity(&scene->world);
+        set_name(&scene->world, snowman_head, "Snowman Head");
+        set_mesh(&scene->world, snowman_head, scene->mesh_sphere, snow_material);
+        set_parent(&scene->world, snowman_head, snowman_chest);
+
+        tr.local_position = glm::vec3(0.0f, 1.3f, 0.0f);
+        tr.local_scale = glm::vec3(0.7f);
+        tr.is_dirty = true;
+        update_transform(&tr);
+        set_local_transform(&scene->world, snowman_head, tr.matrix);
+
+        Material carrot_material = snow_material;
+        carrot_material.Phong.diffuse_color = glm::vec3(1.0f, 0.5f, 0.1f);
+        carrot_material.Phong.diffuse_map = &scene->texture_default;
+        carrot_material.Phong.specular_map = &scene->texture_default;
+        carrot_material.Phong.shininess = 20.0f;
+
+        Entity snowman_carrot = spawn_entity(&scene->world);
+        set_name(&scene->world, snowman_carrot, "Snowman Carrot");
+        set_mesh(&scene->world, snowman_carrot, scene->mesh_cone, carrot_material);
+        set_parent(&scene->world, snowman_carrot, snowman_head);
+
+        tr.local_position = glm::vec3(0.0f, 0.5f, 0.0f);
+        tr.local_rotation = glm::quat(glm::vec3(half_pi, 0.0f, 0.0f));
+        tr.local_scale = glm::vec3(0.8f);
+        tr.is_dirty = true;
+        update_transform(&tr);
+        set_local_transform(&scene->world, snowman_carrot, tr.matrix);
+    }
+    
+
+    for (int i = 0; i < 30; i++) {
+        Entity snowman_copy = copy_entity(&scene->world, snowman);
+
+        Transform tr = {};
+        f32 scale = comp(rng)*0.8f+0.2f;
         glm::vec3 pos(dist(rng), 0.0f, dist(rng));
-        pos.y = sample_point_at(&scene->terrain, pos.x, pos.z) + 0.5f;
-        set_mesh(&scene->world, snowball, scene->mesh_sphere, snow_material);
-        set_local_transform(&scene->world, snowball, glm::translate(glm::mat4(1.0f), pos));
+        pos.y = sample_point_at(&scene->terrain, pos.x, pos.z) + 0.8f*scale;
+        tr.local_position = pos;
+        tr.local_scale = glm::vec3(scale);
+        tr.is_dirty = true;
+        update_transform(&tr);
+        set_local_transform(&scene->world, snowman_copy, tr.matrix);
+
     }
 
     scene->is_initialized = true;
@@ -263,7 +330,20 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     }
 
     render_world(&scene->world);
+
+    ImGui::Begin("Hierarchy", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
+    if (ImGui::TreeNode("World")) {
+        for (int i = 0; i < scene->world.generations.size(); i++) {
+            Entity entity = make_entity(i, scene->world.generations[i]);
+            if (ImGui::TreeNodeEx(lookup_name(&scene->world, entity).c_str(), ImGuiTreeNodeFlags_Leaf)) {
+                ImGui::TreePop();
+            }
+        }
+        ImGui::TreePop();
+    }
+    ImGui::End();
     
+
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::Text("Light Setup:");

@@ -28,6 +28,10 @@ namespace std {
     };
 }
 
+struct Debug_Names {
+    std::unordered_map<Entity, std::string> map;
+};
+
 /**
  * SoA packed array of transform data.
  */
@@ -108,6 +112,7 @@ struct World {
     std::vector<u8> generations;
     std::deque<u32> removed_entity_indices;
 
+    Debug_Names names;
     Transforms transforms;
     Mesh_Renderers mesh_renderers;
     Cameras cameras;
@@ -127,12 +132,19 @@ inline Entity make_entity(u32 index, u8 generation);
 
 Entity spawn_entity(World* world);
 void despawn_entity(World* world, Entity entity);
+Entity copy_entity(World* world, Entity entity);
+inline bool is_alive(World* world, Entity entity);
+
+std::string lookup_name(World* world, Entity entity);
+void set_name(World* world, Entity entity, const char* name);
 
 void set_local_transform(World* world, Entity entity, const glm::mat4& m);
 void destroy_transform(World* world, Entity entity);
 void set_parent(World* world, Entity entity, Entity parent_entity);
+void copy_transform(World* world, Entity entity, Entity copied_entity);
 
 void set_mesh(World* world, Entity entity, Mesh mesh, Material material);
+void copy_mesh(World* world, Entity entity, Entity copied_entity);
 
 void set_perspective(World* world,
                      Entity entity,
