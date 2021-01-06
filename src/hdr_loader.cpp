@@ -22,7 +22,7 @@ float convert_component(int expo, int val) {
     return v * d;
 }
 
-static void workOnRGBE(RGBE* scan, int len, f32* data) {
+static void work_on_rgbe(RGBE* scan, int len, f32* data) {
     while (len-- > 0) {
         int expo = scan[0][E] - 128;
         data[0] = convert_component(expo, scan[0][R]);
@@ -166,7 +166,7 @@ load_hdr_image(const char* fileName, int* width, int* height) {
         if (decrunch(scanline, w, file) == false) {
             break;
         }
-        workOnRGBE(scanline, w, data);
+        work_on_rgbe(scanline, w, data);
         data += w * 3;
     }
 

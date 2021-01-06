@@ -46,34 +46,158 @@ create_mesh_from_builder(Mesh_Builder* mb) {
     return mesh;
 }
 
-inline void
-apply_shader(Shader_Base* shader, Light_Setup* light_setup, glm::vec3 sky_color, f32 fog_density, f32 fog_gradient) {
+void
+begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing) {
+    // Enable depth testing
+    if (depth_testing) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
+    }
+
+    // Set viewport
+    glViewport((GLsizei) viewport.x,
+               (GLsizei) viewport.y,
+               (GLsizei) viewport.z,
+               (GLsizei) viewport.w);
+
+    // Render and clear background
+    glClearColor(clear_color.x,
+                 clear_color.y,
+                 clear_color.z,
+                 clear_color.w);
+    
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+inline void // TODO(alexnader): move this into apply_material
+apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation) {
     glUseProgram(shader->program);
-    if (light_setup && shader->u_light_setup.position != -1) {
-        glUniform3fv(shader->u_light_setup.position, 1, glm::value_ptr(light_setup->position));
-        glUniform3fv(shader->u_light_setup.view_position, 1, glm::value_ptr(light_setup->view_position));
-        glUniform3fv(shader->u_light_setup.color, 1, glm::value_ptr(light_setup->color));
-        glUniform1f(shader->u_light_setup.ambient_intensity, light_setup->ambient_intensity);
-    }
-
-    if (shader->u_sky_color != -1) {
-        glUniform3fv(shader->u_sky_color, 1, glm::value_ptr(sky_color));
-    }
-
-    if (shader->u_fog_density != -1) {
-        glUniform1f(shader->u_fog_density, fog_density);
-    }
-
-    if (shader->u_fog_gradient != -1) {
-        glUniform1f(shader->u_fog_gradient, fog_gradient);
-    }
+    glUniform1f(shader->u_light_attenuation, light_attenuation);
+    glUniform1f(shader->u_light_intensity, light_intensity);
 }
 
 inline void
-apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation) {
-    glUseProgram(shader->base.program);
-    glUniform1f(shader->u_light_attenuation, light_attenuation);
-    glUniform1f(shader->u_light_intensity, light_intensity);
+apply_material(const Material& material,
+               Light_Setup* light_setup,
+               glm::vec3 sky_color,
+               f32 fog_density,
+               f32 fog_gradient) {
+
+    switch (material.type) {
+        case Material_Type_Basic: {
+            const Basic_Shader* shader = material.Basic.shader;
+            glUseProgram(shader->program);
+        } break;
+        
+        case Material_Type_Phong: {
+            const Phong_Shader* shader = material.Phong.shader;
+            glUseProgram(shader->program);
+            if (light_setup) {
+                glUniform3fv(shader->u_light_setup.position, 1, glm::value_ptr(light_setup->position));
+                glUniform3fv(shader->u_light_setup.view_position, 1, glm::value_ptr(light_setup->view_position));
+                glUniform3fv(shader->u_light_setup.color, 1, glm::value_ptr(light_setup->color));
+                glUniform1f(shader->u_light_setup.ambient_intensity, light_setup->ambient_intensity);
+            }
+
+            glUniform3fv(shader->u_sky_color, 1, glm::value_ptr(sky_color));
+            glUniform1f(shader->u_fog_density, fog_density);
+            glUniform1f(shader->u_fog_gradient, fog_gradient);
+        } break;
+
+        case Material_Type_Sky: {
+            const Sky_Shader* shader = material.Sky.shader;
+            glUseProgram(shader->program);
+            glUniform3fv(shader->u_fog_color, 1, glm::value_ptr(sky_color));
+        } break;
+    }
+}
+
+void
+draw_mesh(const Mesh& mesh,
+          const Material& material,
+          const glm::mat4& model_matrix,
+          const glm::mat4& view_matrix,
+          const glm::mat4& projection_matrix,
+          const glm::mat4& view_proj_matrix) {
+
+    switch (material.type) {
+        case Material_Type_Basic: {
+            const Basic_Material* basic = &material.Basic;
+            glUniform4fv(basic->shader->u_color, 1, glm::value_ptr(basic->color));
+            
+            glm::mat4 mvp_transform = model_matrix * view_proj_matrix;
+            glUniformMatrix4fv(basic->shader->u_mvp_transform, 1, GL_FALSE, glm::value_ptr(mvp_transform));
+        } break;
+
+        case Material_Type_Phong: {
+            const Phong_Material* phong = &material.Phong;
+            glUniformMatrix4fv(phong->shader->u_model_transform, 1, GL_FALSE, glm::value_ptr(model_matrix));
+
+            glUniform3fv(phong->shader->u_diffuse_color, 1, glm::value_ptr(phong->diffuse_color));
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
+            glUniform1i(phong->shader->u_diffuse_map, 0);
+
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
+            glUniform1i(phong->shader->u_specular_map, 1);
+
+            glUniform1f(phong->shader->u_shininess, phong->shininess);
+
+            glm::mat4 mvp_transform = view_proj_matrix * model_matrix;
+            glUniformMatrix4fv(phong->shader->u_mvp_transform, 1, GL_FALSE, glm::value_ptr(mvp_transform));
+
+        } break;
+
+        case Material_Type_Sky: {
+            const Sky_Material* sky = &material.Sky;
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(sky->map->target, sky->map->handle);
+            glUniform1i(sky->shader->u_map, 0);
+
+            // Sky should not be moved by the camera!
+            glm::mat4 vp_transform = glm::mat4(view_matrix);
+            vp_transform[3].x = 0.0f;
+            vp_transform[3].y = 0.0f;
+            vp_transform[3].z = 0.0f;
+            vp_transform = projection_matrix * vp_transform;
+            glUniformMatrix4fv(sky->shader->u_vp_transform, 1, GL_FALSE, glm::value_ptr(vp_transform));
+        } break;
+    }
+
+    // Draw mesh
+    glBindVertexArray(mesh.vao);
+
+    if (mesh.is_two_sided) {
+        glDisable(GL_CULL_FACE);
+    }
+    if (mesh.ibo > 0) {
+        glDrawElements(mesh.mode, mesh.count, GL_UNSIGNED_SHORT, 0);
+    } else {
+        glDrawArrays(mesh.mode, 0, mesh.count);
+    }
+    if (mesh.is_two_sided) {
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
+    }
+}
+
+void
+end_frame() {
+    // Resetting opengl the state
+    glUseProgram(0);
+    glBindVertexArray(0);
+    glDisable(GL_DEPTH_TEST);
+    glLineWidth(1);
+    glPointSize(1);
+    glDisable(GL_CULL_FACE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 void
@@ -93,102 +217,6 @@ update_transform(Transform* transform) {
         transform->matrix = rotation * translation * scale;
         transform->is_dirty = false;
     }
-}
-
-void
-draw_graphics_node(Graphics_Node* node, Camera_3D* camera) {
-    // Update transform of the node
-    update_transform(&node->transform);
-    glm::mat4 mvp_transform = camera->combined_matrix * node->transform.matrix;
-
-    // Apply material
-    Material* material = &node->material;
-    glUniformMatrix4fv(material->shader->u_mvp_transform, 1, GL_FALSE, glm::value_ptr(mvp_transform));
-    switch (material->type) {
-        case Material_Type_Basic: {
-            Basic_Material* basic = &material->Basic;
-            glUniform4fv(basic->shader->u_color, 1, glm::value_ptr(basic->color));
-        } break;
-
-        case Material_Type_Phong: {
-            Phong_Material* phong = &material->Phong;
-            glUniformMatrix4fv(material->shader->u_model_transform, 1,
-                               GL_FALSE, glm::value_ptr(node->transform.matrix));
-
-            glUniform3fv(phong->shader->u_diffuse_color, 1, glm::value_ptr(phong->diffuse_color));
-
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
-            glUniform1i(phong->shader->u_diffuse_map, 0);
-
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(phong->diffuse_map->target, phong->diffuse_map->handle);
-            glUniform1i(phong->shader->u_specular_map, 1);
-
-            glUniform1f(phong->shader->u_shininess, phong->shininess);
-
-        } break;
-
-        case Material_Type_Sky: {
-            Sky_Material* sky = &material->Sky;
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(sky->map->target, sky->map->handle);
-            glUniform1i(sky->shader->u_map, 0);
-            glUniform3fv(sky->shader->u_color, 1, glm::value_ptr(sky->color));
-        } break;
-    }
-
-    // Draw mesh
-    assert(node->mesh && "missing mesh information");
-    glBindVertexArray(node->mesh->vao);
-
-    if (node->mesh->disable_culling) {
-        glDisable(GL_CULL_FACE);
-    }
-    if (node->mesh->ibo > 0) {
-        glDrawElements(node->mesh->mode, node->mesh->count, GL_UNSIGNED_SHORT, 0);
-    } else {
-        glDrawArrays(node->mesh->mode, 0, node->mesh->count);
-    }
-    if (node->mesh->disable_culling) {
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
-        glFrontFace(GL_CCW);
-    }
-}
-
-void
-initialize_camera_3d(Camera_3D* camera, f32 fov, f32 near, f32 far, f32 aspect_ratio) {
-    camera->fov = fov;
-    camera->near = near;
-    camera->far = far;
-    camera->aspect_ratio = aspect_ratio;
-    initialize_transform(&camera->transform);
-    camera->is_dirty = true;
-}
-
-void
-update_camera_3d(Camera_3D* camera, f32 aspect_ratio) {
-    if (camera->aspect_ratio != aspect_ratio) {
-        camera->aspect_ratio = aspect_ratio;
-        camera->is_dirty = true;
-    }
-
-    bool is_transform_dirty = camera->transform.is_dirty;
-    update_transform(&camera->transform);
-
-    if (camera->is_dirty) {
-        camera->perspective_matrix = glm::perspective(camera->fov,
-                                                      camera->aspect_ratio,
-                                                      camera->near,
-                                                      camera->far);
-    }
-
-    if (is_transform_dirty || camera->is_dirty) {
-        camera->combined_matrix = camera->perspective_matrix * camera->transform.matrix;
-    }
-
-    camera->is_dirty = false;
 }
 
 void
@@ -213,38 +241,6 @@ update_camera_2d(Camera_2D* camera, Input* input) {
     }
     camera->x += (input->mouse_x/(camera->zoom + 1.0f) - prev_mouse_x);
     camera->y += (input->mouse_y/(camera->zoom + 1.0f) - prev_mouse_y);
-}
-
-void
-begin_scene(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing) {
-    // Enable depth testing
-    if (depth_testing) {
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
-
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
-        glFrontFace(GL_CCW);
-    }
-
-    // Set viewport
-    glViewport((GLsizei) viewport.x, (GLsizei) viewport.y, (GLsizei) viewport.z, (GLsizei) viewport.w);
-
-    // Render and clear background
-    glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-}
-
-void
-end_scene() {
-    // Resetting opengl the state
-    glUseProgram(0);
-    glBindVertexArray(0);
-    glDisable(GL_DEPTH_TEST);
-    glLineWidth(1);
-    glPointSize(1);
-    glDisable(GL_CULL_FACE);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 Texture
@@ -361,150 +357,6 @@ create_texture_2d_from_data(void* data,
     return texture;
 }
 
-static f32
-fade(f32 t) {
-    return t * t * t * (t * (t * 6 - 15) + 10);
-}
-
-static f32
-grad(int hash, f32 x, f32 y, f32 z) {
-    switch (hash & 0xf) {
-        case 0x0: return  x + y;
-        case 0x1: return -x + y;
-        case 0x2: return  x - y;
-        case 0x3: return -x - y;
-        case 0x4: return  x + z;
-        case 0x5: return -x + z;
-        case 0x6: return  x - z;
-        case 0x7: return -x - z;
-        case 0x8: return  y + z;
-        case 0x9: return -y + z;
-        case 0xa: return  y - z;
-        case 0xb: return -y - z;
-        case 0xc: return  y + x;
-        case 0xd: return -y + z;
-        case 0xe: return  y - x;
-        case 0xf: return -y - z;
-        default:  return 0; // never happens
-    }
-}
-
-f32
-lerp(f32 t, f32 a, f32 b) {
-    return a + t * (b - a);
-}
-
-static int*
-generate_perlin_permutations() {
-    std::random_device rd;
-    std::mt19937 rng = std::mt19937(rd());
-    std::uniform_real_distribution<f32> random(0.0f, 1.0f);
-
-    int* permutations = new int[512];
-    for (int i = 0; i < 256; i++) {
-        permutations[i] = i;
-    }
-    for (int i = 0; i < 256; i++) {
-        int index = i + random(rng) * (256 - i);
-        int temp = permutations[i];
-        permutations[i] = permutations[index];
-        permutations[index] = temp;
-    }
-    for (int i = 0; i < 256; i++) {
-        permutations[256+i] = permutations[i];
-    }
-    // printf("generated_permutations = {\n");
-    // for (int i = 0; i < 256; i++) {
-    //     printf("%d, ", permutations[i]);
-    //     if (i % 20 == 19) {
-    //         printf("\n");
-    //     }
-    // }
-    // printf("\n}\n");
-    return permutations;
-}
-
-f32 // NOTE: implementation based on https://adrianb.io/2014/08/09/perlinnoise.html
-perlin_noise(f32 x, f32 y, f32 z) {
-    static int* p = generate_perlin_permutations();
-
-    int xi = (int) x & 0xff;
-    int yi = (int) y & 0xff;
-    int zi = (int) z & 0xff;
-    x -= (int) x;
-    y -= (int) y;
-    z -= (int) z;
-    f32 u = fade(x);
-    f32 v = fade(y);
-    f32 w = fade(z);
-
-    int aaa = p[p[p[xi    ] + yi    ] + zi    ];
-    int aba = p[p[p[xi    ] + yi + 1] + zi    ];
-    int aab = p[p[p[xi    ] + yi    ] + zi + 1];
-    int abb = p[p[p[xi    ] + yi + 1] + zi + 1];
-    int baa = p[p[p[xi + 1] + yi    ] + zi    ];
-    int bba = p[p[p[xi + 1] + yi + 1] + zi    ];
-    int bab = p[p[p[xi + 1] + yi    ] + zi + 1];
-    int bbb = p[p[p[xi + 1] + yi + 1] + zi + 1];
-
-    f32 x1, x2, y1, y2;
-    x1 = lerp(u, grad(aaa, x, y,     z), grad(baa, x - 1, y,     z));
-    x2 = lerp(u, grad(aba, x, y - 1, z), grad(bba, x - 1, y - 1, z));
-    y1 = lerp(v, x1, x2);
-
-    x1 = lerp(u, grad(aab, x, y,     z - 1), grad(bab, x - 1, y,     z - 1));
-    x2 = lerp(u, grad(abb, x, y - 1, z - 1), grad(bbb, x - 1, y - 1, z - 1));
-    y2 = lerp(v, x1, x2);
-
-    return (lerp(w, y1, y2) + 1)/2;
-}
-
-f32
-octave_perlin_noise(f32 x, f32 y, f32 z, int octaves, f32 persistance) {
-    f32 total = 0.0f;
-    f32 frequency = 1.0f;
-    f32 amplitude = 1.0f;
-    f32 max_value = 0.0f;
-    for (int i = 0; i < octaves; i++) {
-        total += perlin_noise(x * frequency, y * frequency, z * frequency) * amplitude;
-        max_value += amplitude;
-        amplitude *= persistance;
-        frequency *= 2;
-    }
-
-    return total/max_value;
-}
-
-f32
-sample_point_at(Height_Map* map, f32 x, f32 y) {
-    int x0 = x*map->scale_x;
-    int y0 = y*map->scale_y;
-
-    if (x0 < 0) x0 = 0; if (x0 > map->width - 1)  x0 = map->width  - 1;
-    if (y0 < 0) y0 = 0; if (y0 > map->height - 1) y0 = map->height - 1;
-    
-    int x1 = x0 + 1;
-    int y1 = y0 + 1;
-
-    if (x1 > map->width - 1)  x1 = map->width  - 1;
-    if (y1 > map->height - 1) y1 = map->height - 1;
-    
-    // printf("x0 = %d, y0 = %d, x1 = %d, y1 = %d\n", x0, y0, x1, y1);
-
-    f32 h1 = map->data[x0+y0*map->width];
-    f32 h2 = map->data[x1+y0*map->width];
-    f32 h3 = map->data[x0+y1*map->width];
-    f32 h4 = map->data[x1+y1*map->width];
-
-    // printf("h1 = %f, h2 = %f, h3 = %f, h4 = %f\n", h1, h2, h3, h4);
-    
-    f32 u = x*map->scale_x - x0;
-    f32 v = y*map->scale_y - y0;
-    f32 hx0 = lerp(u, h1, h2);
-    f32 hx1 = lerp(u, h3, h4);
-    return lerp(v, hx0, hx1);
-}
-
 static GLuint
 load_glsl_shader_from_sources(const char* vertex_shader, const char* fragment_shader) {
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
@@ -589,33 +441,14 @@ load_glsl_shader_from_file(const char* filename) {
     return load_glsl_shader_from_sources(vertex_source.c_str(), fragment_source.c_str());
 }
 
-static void
-setup_shader_base_uniforms(Shader_Base* shader_base) {
-    GLuint program = shader_base->program;
-    shader_base->u_model_transform = glGetUniformLocation(program, "model_transform");
-    shader_base->u_mvp_transform = glGetUniformLocation(program, "mvp_transform");
-
-    shader_base->u_sky_color = glGetUniformLocation(program, "sky_color");
-    shader_base->u_fog_density = glGetUniformLocation(program, "fog_density");
-    shader_base->u_fog_gradient = glGetUniformLocation(program, "fog_gradient");
-
-    shader_base->u_light_setup.position = glGetUniformLocation(program, "light_setup.position");
-    shader_base->u_light_setup.view_position = glGetUniformLocation(program, "light_setup.view_position");
-    shader_base->u_light_setup.color = glGetUniformLocation(program, "light_setup.color");
-    shader_base->u_light_setup.ambient_intensity = glGetUniformLocation(program, "light_setup.ambient_intensity");
-}
-
 Basic_2D_Shader
 compile_basic_2d_shader() {
     Basic_2D_Shader shader = {};
     GLuint program = load_glsl_shader_from_file("basic_2d.glsl");
     glUseProgram(program);
-    shader.base.program = program;
-    shader.base.u_mvp_transform = glGetUniformLocation(program, "mvp_transform");
-    shader.base.u_sky_color     = -1;
-    shader.base.u_fog_density   = -1;
-    shader.base.u_fog_gradient  = -1;
-    shader.u_color              = glGetUniformLocation(program, "color");
+    shader.program = program;
+    shader.u_color         = glGetUniformLocation(program, "color");
+    shader.u_mvp_transform = glGetUniformLocation(program, "mvp_transform");
     return shader;
 }
 
@@ -624,14 +457,11 @@ compile_basic_shader() {
     Basic_Shader shader = {};
     GLuint program = load_glsl_shader_from_file("basic.glsl");
     glUseProgram(program);
-    shader.base.program = program;
-    shader.base.u_mvp_transform = glGetUniformLocation(program, "mvp_transform");
-    shader.base.u_sky_color     = -1;
-    shader.base.u_fog_density   = -1;
-    shader.base.u_fog_gradient  = -1;
-    shader.u_color              = glGetUniformLocation(program, "color");
-    shader.u_light_intensity    = glGetUniformLocation(program, "light_intensity");
-    shader.u_light_attenuation  = glGetUniformLocation(program, "light_attenuation");
+    shader.program = program;
+    shader.u_color             = glGetUniformLocation(program, "color");
+    shader.u_light_intensity   = glGetUniformLocation(program, "light_intensity");
+    shader.u_light_attenuation = glGetUniformLocation(program, "light_attenuation");
+    shader.u_mvp_transform     = glGetUniformLocation(program, "mvp_transform");
     return shader;
 }
 
@@ -640,12 +470,23 @@ compile_phong_shader() {
     Phong_Shader shader = {};
     GLuint program = load_glsl_shader_from_file("phong.glsl");
     glUseProgram(program);
-    shader.base.program = program;
+    shader.program = program;
     shader.u_diffuse_color = glGetUniformLocation(program, "material.diffuse_color");
-    shader.u_diffuse_map = glGetUniformLocation(program, "material.diffuse_map");
-    shader.u_specular_map = glGetUniformLocation(program, "material.specular_map");
-    shader.u_shininess = glGetUniformLocation(program, "material.shininess");
-    setup_shader_base_uniforms(&shader.base);
+    shader.u_diffuse_map   = glGetUniformLocation(program, "material.diffuse_map");
+    shader.u_specular_map  = glGetUniformLocation(program, "material.specular_map");
+    shader.u_shininess     = glGetUniformLocation(program, "material.shininess");
+    
+    shader.u_model_transform = glGetUniformLocation(program, "model_transform");
+    shader.u_mvp_transform   = glGetUniformLocation(program, "mvp_transform");
+
+    shader.u_sky_color    = glGetUniformLocation(program, "sky_color");
+    shader.u_fog_density  = glGetUniformLocation(program, "fog_density");
+    shader.u_fog_gradient = glGetUniformLocation(program, "fog_gradient");
+
+    shader.u_light_setup.position          = glGetUniformLocation(program, "light_setup.position");
+    shader.u_light_setup.view_position     = glGetUniformLocation(program, "light_setup.view_position");
+    shader.u_light_setup.color             = glGetUniformLocation(program, "light_setup.color");
+    shader.u_light_setup.ambient_intensity = glGetUniformLocation(program, "light_setup.ambient_intensity");
     return shader;
 }
 
@@ -654,13 +495,9 @@ compile_sky_shader() {
     Sky_Shader shader = {};
     GLuint program = load_glsl_shader_from_file("sky.glsl");
     glUseProgram(program);
-    shader.base.program = program;
-    shader.base.u_mvp_transform = glGetUniformLocation(program, "mvp_transfor2m");
-    shader.base.u_sky_color    = -1;
-    shader.base.u_fog_density  = -1;
-    shader.base.u_fog_gradient = -1;
-    shader.base.u_light_setup.position = -1;
-    shader.u_map   = glGetUniformLocation(program, "material.map");
-    shader.u_color = glGetUniformLocation(program, "material.color");
+    shader.program = program;
+    shader.u_map          = glGetUniformLocation(program, "material.map");
+    shader.u_fog_color    = glGetUniformLocation(program, "material.fog_color");
+    shader.u_vp_transform = glGetUniformLocation(program, "vp_transform");
     return shader;
 }

@@ -750,13 +750,13 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     }
     
     // Begin rendering our basic 2D scene
-    begin_scene(primary_bg_color, glm::vec4(0, 0, window->width, window->height));
+    begin_frame(primary_bg_color, glm::vec4(0, 0, window->width, window->height));
 
     // Enable shader
-    apply_shader(&scene->shader.base, NULL);
+    glUseProgram(scene->shader.program);
 
     // Render `filled` triangulated shape
-    glUniformMatrix4fv(scene->shader.base.u_mvp_transform, 1, GL_FALSE, glm::value_ptr(transform));
+    glUniformMatrix4fv(scene->shader.u_mvp_transform, 1, GL_FALSE, glm::value_ptr(transform));
     glUniform4f(scene->shader.u_color, 1.0f, 1.0f, 1.0f, 1.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     if (scene->index_count > 0) glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
@@ -824,5 +824,5 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     ImGui::Text("y = %.3f", y);
     ImGui::End();
 
-    end_scene();
+    end_frame();
 }
