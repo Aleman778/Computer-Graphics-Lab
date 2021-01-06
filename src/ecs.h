@@ -88,6 +88,7 @@ struct Camera_Data {
     f32 near;
     f32 far;
     f32 aspect_ratio;
+    glm::vec3 view_position;
     glm::mat4 projection_matrix; // projection * view (aka. camera transform)
     glm::vec4 viewport;
     bool is_orthographic; // perspective (false), orthographic (true)

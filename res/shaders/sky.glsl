@@ -14,11 +14,11 @@ out Fragment_Data {
     vec2 texcoord;
 } fragment;
 
-uniform mat4 mvp_transfor2m;
+uniform mat4 vp_transform;
 
 void main() {
     fragment.texcoord = texcoord;
-    gl_Position = mvp_transfor2m * vec4(position, 1.0f);
+    gl_Position = vp_transform * vec4(position, 1.0f);
 }
 
 /***************************************************************************
@@ -37,14 +37,14 @@ out vec4 frag_color;
 // Material depandant uniforms
 struct Material {
     sampler2D map;
-    vec3 color;
+    vec3 fog_color;
 };
 
 uniform Material material;
 
 void main() {
-    vec4 sky_color = vec4(material.color, 1.0f);
+    vec4 fog_color = vec4(material.fog_color, 1.0f);
     vec4 texel_color = texture2D(material.map, fragment.texcoord);
     float factor = 1.0f - exp(-pow(fragment.texcoord.y + 0.55f, 40.0f));
-    frag_color = mix(texel_color, sky_color, factor);
+    frag_color = mix(texel_color, fog_color, factor);
 }

@@ -68,13 +68,13 @@ ensure_transform_capacity(Transform_Data* data, usize new_capacity) {
         new_data.count = data->count;
 
         if (new_data.capacity == 0) {
-            new_data.capacity = 10;
+            new_data.capacity = 100;
         } else {
             new_data.capacity *= 2;
         }
         if (new_capacity > new_data.capacity) new_data.capacity = new_capacity;
 
-        u32 size = new_data.capacity*(sizeof(Entity) + 2*sizeof(glm::mat4));
+        u32 size = new_data.capacity*(sizeof(Entity) + 2*sizeof(glm::mat4) + 4*sizeof(u32));
         new_data.buffer       = (u8*) malloc(size);
         new_data.entity       = (Entity*)     new_data.buffer;
         new_data.local        = (glm::mat4*) (new_data.entity + new_data.capacity);
@@ -85,6 +85,7 @@ ensure_transform_capacity(Transform_Data* data, usize new_capacity) {
         new_data.next_sibling = (u32*)       (new_data.prev_sibling + new_data.capacity);
 
         if (data->buffer && data->count > 0) {
+            data->count += 1;
             memcpy(new_data.entity, data->entity, data->count*sizeof(Entity));
             memcpy(new_data.local, data->local, data->count*sizeof(glm::mat4));
             memcpy(new_data.world, data->world, data->count*sizeof(glm::mat4));
@@ -101,10 +102,10 @@ ensure_transform_capacity(Transform_Data* data, usize new_capacity) {
 
 static inline u32
 lookup_transform(Transforms* transforms, Entity entity) {
-    if (transforms->map.find(entity) == transforms->map.end()) {
-        return 0;
+    if (transforms->map.find(entity) != transforms->map.end()) {
+        return transforms->map[entity];
     }
-    return transforms->map[entity];
+    return 0;
 }
 
 static u32
@@ -152,7 +153,7 @@ set_local_transform(World* world, Entity entity, const glm::mat4& m) {
 glm::mat4
 get_world_transform(World* world, Entity entity) {
     u32 index = lookup_transform(&world->transforms, entity);
-    if (!index) {
+    if (index) {
         return world->transforms.data.world[index];
     }
     return glm::mat4(1.0f);
@@ -249,22 +250,23 @@ ensure_mesh_data_capacity(Mesh_Data* data, usize new_capacity) {
         new_data.count = data->count;
 
         if (new_data.capacity == 0) {
-            new_data.capacity = 10;
+            new_data.capacity = 100;
         } else {
             new_data.capacity *= 2;
         }
         if (new_capacity > new_data.capacity) new_data.capacity = new_capacity;
 
-        u32 size = new_data.capacity*(sizeof(Entity) + 2*sizeof(glm::mat4));
+        u32 size = new_data.capacity*(sizeof(Entity) + sizeof(Mesh) + sizeof(Material));
         new_data.buffer   = (u8*) malloc(size);
         new_data.entity   = (Entity*)    new_data.buffer;
         new_data.mesh     = (Mesh*)     (new_data.entity + new_data.capacity);
         new_data.material = (Material*) (new_data.mesh + new_data.capacity);
 
         if (data->buffer && data->count > 0) {
+            data->count += 1;
             memcpy(new_data.entity, data->entity, data->count*sizeof(Entity));
             memcpy(new_data.mesh, data->mesh, data->count*sizeof(Mesh));
-            memcpy(new_data.material, data->material, data->count*sizeof(Entity));
+            memcpy(new_data.material, data->material, data->count*sizeof(Material));
             free(data->buffer);
         }
 
@@ -274,10 +276,10 @@ ensure_mesh_data_capacity(Mesh_Data* data, usize new_capacity) {
 
 static inline u32
 lookup_mesh(Mesh_Renderers* mesh_renderers, Entity entity) {
-    if (mesh_renderers->map.find(entity) == mesh_renderers->map.end()) {
-        return 0;
+    if (mesh_renderers->map.find(entity) != mesh_renderers->map.end()) {
+        return mesh_renderers->map[entity];
     }
-    return mesh_renderers->map[entity];
+    return 0;
 }
 
 void
@@ -302,12 +304,12 @@ set_mesh(World* world, Entity entity, Mesh mesh, Material material) {
  * Camera Component
  ***************************************************************************/
 
-static inline Camera_Data*
+inline Camera_Data*
 lookup_camera(Cameras* cameras, Entity entity) {
-    if (cameras->map.find(entity) == cameras->map.end()) {
-        return NULL;
+    if (cameras->map.find(entity) != cameras->map.end()) {
+        return &cameras->map[entity];
     }
-    return &cameras->map[entity];
+    return NULL;
 }
 
 void
@@ -318,18 +320,19 @@ set_perspective(World* world,
                 f32 far,
                 f32 aspect_ratio,
                 glm::vec4 viewport) {
-    Camera_Data camera = world->cameras.map[entity];
+    Camera_Data camera = {};
     camera.entity = entity;
     camera.fov = fov;
     camera.near = near;
     camera.far = far;
     camera.aspect_ratio = aspect_ratio;
-    camera;
+    camera.viewport = viewport;
     camera.is_orthographic = false;
     camera.projection_matrix = glm::perspective(camera.fov,
                                                 camera.aspect_ratio,
                                                 camera.near,
                                                 camera.far);
+    world->cameras.map.emplace(entity, camera);
 }
 
 void
@@ -342,7 +345,7 @@ set_orthographic(World* world,
                  f32 near,
                  f32 far,
                  glm::vec4 viewport) {
-    Camera_Data camera = world->cameras.map[entity];
+    Camera_Data camera = {};
     camera.entity = entity;
     camera.left = left;
     camera.right = right;
@@ -350,8 +353,8 @@ set_orthographic(World* world,
     camera.top = top;
     camera.near = near;
     camera.far = far;
+    camera.viewport = viewport;
     camera.is_orthographic = true;
-    camera.viewport = glm::vec4(left, top, right, bottom);
     if (near == 0 && far == 0) {
         camera.projection_matrix = glm::ortho(camera.left,
                                               camera.right,
@@ -365,12 +368,13 @@ set_orthographic(World* world,
                                               camera.near,
                                               camera.far);
     }
+    world->cameras.map.emplace(entity, camera);
 }
 
 void
 adjust_camera_to_fill_window(World* world, Entity entity, int width, int height) {
     Camera_Data* camera = lookup_camera(&world->cameras, entity);
-    if (!camera) return;
+    assert(camera && "entity is missing a camera component");
 
     f32 aspect_ratio = 0.0f;
     if (width != 0 && height != 0) {
@@ -408,7 +412,7 @@ adjust_camera_to_fill_window(World* world, Entity entity, int width, int height)
                                                          camera->near,
                                                          camera->far);
         }
-    } 
+    }
 }
 
 // TODO(alexander): delete camera component
@@ -420,43 +424,37 @@ adjust_camera_to_fill_window(World* world, Entity entity, int width, int height)
 void
 render_world(World* world) {
     Camera_Data* camera = lookup_camera(&world->cameras, world->main_camera);
-    if (is_alive(world, world->main_camera) || !camera) return;
-        
+    if (!is_alive(world, world->main_camera) || !camera) return;
+    world->light_setup.view_position = camera->view_position;
+
     begin_frame(world->clear_color, camera->viewport, world->depth_testing);
 
     // Camera matrices
     glm::mat4 projection_matrix = camera->projection_matrix;
     glm::mat4 view_matrix = get_world_transform(world, world->main_camera);
-    glm::mat4 view_proj_matrix = view_matrix * projection_matrix;
-    
+    glm::mat4 view_proj_matrix = projection_matrix * view_matrix;
+
     Material_Type prev_material = Material_Type_None;
     Mesh_Data* rendering_data = &world->mesh_renderers.data;
     Transform_Data* transform_data = &world->transforms.data;
 
-    for (u32 i = 0; i < rendering_data->count; i++) {
+    for (u32 i = 1; i < rendering_data->count + 1; i++) {
         Entity entity = rendering_data->entity[i];
         if (!is_alive(world, entity)) continue;
 
-        u32 transform_index = lookup_transform(&world->transforms, entity);
-        glm::mat4 model_matrix;
-        if (transform_index) {
-            model_matrix = transform_data->world[transform_index];
-        } else {
-            model_matrix = glm::mat4(1.0f);
-        }
-
+        glm::mat4 model_matrix = get_world_transform(world, entity);
         const Material material = rendering_data->material[i];
         const Mesh mesh = rendering_data->mesh[i];
 
         if (material.type != prev_material) {
-            apply_shader(material.shader,
-                         &world->light_setup,
-                         world->clear_color,
-                         world->fog_density,
-                         world->fog_gradient);
+            apply_material(material,
+                           &world->light_setup,
+                           world->clear_color,
+                           world->fog_density,
+                           world->fog_gradient);
         }
 
-        draw_mesh(mesh, material, model_matrix, view_proj_matrix);
+        draw_mesh(mesh, material, model_matrix, view_matrix, projection_matrix, view_proj_matrix);
     }
 
     end_frame();

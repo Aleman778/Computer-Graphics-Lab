@@ -39,7 +39,6 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     material.type = Material_Type_Basic;
     material.Basic.shader = &scene->basic_shader;
     material.Basic.color = primary_fg_color;
-    material.shader = &scene->basic_shader.base;
 
     // Create all the graphics nodes
     for (int i = 0; i < 100; i++) {
@@ -61,6 +60,7 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
 
     // Create camera entity
     scene->camera = spawn_entity(&scene->world);
+    scene->world.main_camera = scene->camera;
     set_perspective(&scene->world, scene->camera);
 
     // Scene properties

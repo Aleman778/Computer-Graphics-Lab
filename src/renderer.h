@@ -21,13 +21,34 @@ struct Texture {
     GLuint handle;
 };
 
-struct Shader_Base {
+struct Basic_2D_Shader {
     GLuint program;
+    GLint u_color;
+    GLint u_mvp_transform;
+};
+
+struct Basic_Shader {
+    GLuint program;
+    GLint u_color;
+    GLint u_light_attenuation;
+    GLint u_light_intensity;
+    GLint u_mvp_transform;
+};
+
+struct Phong_Shader {
+    GLuint program;
+    GLint u_diffuse_color;
+    GLint u_diffuse_map;
+    GLint u_specular_map;
+    GLint u_shininess;
+
     GLint u_model_transform;
     GLint u_mvp_transform;
+
     GLint u_sky_color; // usually same as clear color
     GLint u_fog_density; // increase density -> more fog (shorter view distance)
     GLint u_fog_gradient; // increase gradient -> sharper transition
+
     struct {
         GLint position;
         GLint view_position;
@@ -36,30 +57,12 @@ struct Shader_Base {
     } u_light_setup;
 };
 
-struct Basic_2D_Shader {
-    Shader_Base base;
-    GLint u_color;
-};
-
-struct Basic_Shader {
-    Shader_Base base;
-    GLint u_color;
-    GLint u_light_attenuation;
-    GLint u_light_intensity;
-};
-
-struct Phong_Shader {
-    Shader_Base base;
-    GLint u_diffuse_color;
-    GLint u_diffuse_map;
-    GLint u_specular_map;
-    GLint u_shininess;
-};
-
 struct Sky_Shader {
-    Shader_Base base;
+    GLuint program;
     GLint u_map;
-    GLint u_color;
+    GLint u_fog_color;
+
+    GLint u_vp_transform;
 };
 
 struct Light_Setup {
@@ -92,7 +95,6 @@ struct Phong_Material {
 struct Sky_Material {
     Sky_Shader* shader;
     Texture* map;
-    glm::vec3 color;
 };
 
 struct Material {
@@ -102,7 +104,6 @@ struct Material {
         Phong_Material Phong;
         Sky_Material Sky;
     };
-    Shader_Base* shader;
 };
 
 struct Transform {
@@ -131,26 +132,24 @@ struct Camera_2D {
     f32 zoom;
 };
 
-Mesh create_cuboid_basic_mesh(glm::vec3 c, glm::vec3 d);
-Mesh create_cuboid_mesh(glm::vec3 c, glm::vec3 d);
+void begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false);
 
-inline void apply_shader(Shader_Base* shader,
-                         Light_Setup* light_setup=NULL,
-                         glm::vec3 sky_color=glm::vec3(0.0f),
-                         f32 fog_desnity=0.0f,
-                         f32 fog_gradient=0.0f);
-inline void apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation);
+void apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation);
 
-void initialize_transform(Transform* transform,
-                          glm::vec3 pos=glm::vec3(0.0f),
-                          glm::quat rot=glm::quat(glm::vec3(0.0f, 0.0f, 0.0f)),
-                          glm::vec3 scale=glm::vec3(1.0f));
-void update_transform(Transform* transform);
+void apply_material(Material* material,
+                           Light_Setup* light_setup=NULL,
+                           glm::vec3 sky_color=glm::vec3(0.0f),
+                           f32 fog_desnity=0.0f,
+                           f32 fog_gradient=0.0f);
 
 void draw_mesh(const Mesh& mesh,
                const Material& material,
-               const glm::mat4 model_matrix,
-               const glm::mat4 view_proj_matrix);
+               const glm::mat4& model_matrix,
+               const glm::mat4& view_matrix,
+               const glm::mat4& projection_matrix,
+               const glm::mat4& view_proj_matrix);
+
+void end_frame();
 
 void initialize_camera_3d(Camera_3D* camera,
                           f32 fov=glm::radians(90.0f),
@@ -158,13 +157,14 @@ void initialize_camera_3d(Camera_3D* camera,
                           f32 far=100000.0f,
                           f32 aspect_ratio=1.0f);
 
-void update_camera_3d(Camera_3D* camera, f32 aspect_ratio);
+
+void initialize_transform(Transform* transform,
+                          glm::vec3 pos=glm::vec3(0.0f),
+                          glm::quat rot=glm::quat(glm::vec3(0.0f, 0.0f, 0.0f)),
+                          glm::vec3 scale=glm::vec3(1.0f));
+void update_transform(Transform* transform);
 
 void update_camera_2d(Camera_2D* camera, Input* input);
-
-void begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false);
-
-void end_frame();
 
 Texture generate_white_2d_texture();
 Texture load_texture_2d_from_file(const char* filepath,
