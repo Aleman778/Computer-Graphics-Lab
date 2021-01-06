@@ -1,3 +1,4 @@
+// NOTE: implementation based on https://adrianb.io/2014/08/09/perlinnoise.html
 
 static f32
 fade(f32 t) {
@@ -66,7 +67,7 @@ generate_perlin_permutations() {
     return permutations;
 }
 
-f32 // NOTE: implementation based on https://adrianb.io/2014/08/09/perlinnoise.html
+f32
 perlin_noise(f32 x, f32 y, f32 z) {
     static int* p = generate_perlin_permutations();
 

@@ -176,6 +176,51 @@ set_local_transform(World* world, Entity entity, const glm::mat4& m) {
     set_transform(data, parent_m, index);
 }
 
+void
+translate(World* world, Entity entity, const glm::vec3& v) {
+    Transform_Data* data = &world->transforms.data;
+    u32 index = lookup_transform(&world->transforms, entity);
+    if (!index) {
+        index = create_transform(&world->transforms, entity);
+        data->local[index] = glm::mat4(1.0f);
+    }
+    
+    data->local[index] = glm::translate(data->local[index], v);
+    u32 parent = data->parent[index];
+    glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
+    set_transform(data, parent_m, index);
+}
+
+void
+rotate(World* world, Entity entity, const glm::vec3& v) {
+    Transform_Data* data = &world->transforms.data;
+    u32 index = lookup_transform(&world->transforms, entity);
+    if (!index) {
+        index = create_transform(&world->transforms, entity);
+        data->local[index] = glm::mat4(1.0f);
+    }
+    
+    data->local[index] *= glm::toMat4(glm::quat(v));
+    u32 parent = data->parent[index];
+    glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
+    set_transform(data, parent_m, index);
+}
+
+void
+scale(World* world, Entity entity, const glm::vec3& v) {
+    Transform_Data* data = &world->transforms.data;
+    u32 index = lookup_transform(&world->transforms, entity);
+    if (!index) {
+        index = create_transform(&world->transforms, entity);
+        data->local[index] = glm::mat4(1.0f);
+    }
+    
+    data->local[index] = glm::scale(data->local[index], v);
+    u32 parent = data->parent[index];
+    glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
+    set_transform(data, parent_m, index);
+}
+
 glm::mat4
 get_world_transform(World* world, Entity entity) {
     u32 index = lookup_transform(&world->transforms, entity);

@@ -121,19 +121,19 @@ push_sphere(Mesh_Builder* mb, glm::vec3 c, f32 r, int detail_x=16, int detail_y=
 }
 
 void
-push_circle_triangle_strips(Mesh_Builder* mb, glm::vec3 c, glm::vec3 n, f32 r, int detail=16) {
+push_circle_triangle_strips(Mesh_Builder* mb, glm::vec3 c, glm::vec3 n, f32 r, int detail=16, bool reverse=false) {
     Vertex center_v = { c, glm::vec2(0.5f, 0.5f), n };
     usize center_index = mb->vertices.size();
     mb->vertices.push_back(center_v);
 
     // build bottom circle
     for (int i = 0; i < detail; i++) {
-        f32 angle = two_pi - two_pi * ((f32) i/ (f32) detail);
+        f32 angle = (reverse ? -1.0f : 1.0f) * two_pi * ((f32) i/ (f32) detail);
         glm::vec3 pos(c.x + cos(angle)*r, c.y, c.z + sin(angle)*r);
         Vertex v = { pos, glm::vec2(cos(angle), sin(angle)), n };
         mb->vertices.push_back(v);
-        mb->indices.push_back(center_index + 1 + i);
         mb->indices.push_back(center_index);
+        mb->indices.push_back(center_index + 1 + i);
     }
     mb->indices.push_back(center_index + 1);
 }
@@ -142,11 +142,11 @@ void
 push_cylinder_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int detail=16) {
     glm::vec3 tc = glm::vec3(bc.x, bc.y - h, bc.z);
 
-    push_circle_triangle_strips(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail);
+    push_circle_triangle_strips(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail, true);
     usize base_index = mb->vertices.size();
 
     for (int i = 0; i <= detail; i++) {
-        f32 angle = two_pi - two_pi * ((f32) i/ (f32) detail);
+        f32 angle = two_pi * ((f32) i/ (f32) detail);
         glm::vec3 normal = glm::normalize(glm::vec3(cos(angle), 0.0f, sin(angle)));
         glm::vec3 bottom_pos = normal*r + bc;
         glm::vec2 bottom_texcoord(cos(angle), 0.0f);
@@ -158,11 +158,11 @@ push_cylinder_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int 
 
         Vertex tv = { top_pos, top_texcoord, normal };
         mb->vertices.push_back(tv);
-
         mb->indices.push_back(base_index + i*2);
         mb->indices.push_back(base_index + i*2 + 1);
     }
 
+    mb->indices.push_back(base_index + 1);
     push_circle_triangle_strips(mb, tc, glm::vec3(0.0f, 1.0f, 0.0f), r, detail);
 }
 
@@ -175,16 +175,15 @@ push_cone_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int deta
     mb->vertices.push_back(top_v);
 
     for (int i = 0; i < detail; i++) {
-        f32 angle = two_pi - two_pi * ((f32) i/ (f32) detail);
+        f32 angle = two_pi * ((f32) i/ (f32) detail);
         glm::vec3 pos(bc.x + cos(angle)*r, bc.y, bc.z + sin(angle)*r);
         glm::vec3 normal(pos.x*h/r, r/h, pos.z*h/r);
         normal = glm::normalize(normal);
         Vertex v = { pos, glm::vec2(cos(angle), sin(angle)), normal };
         mb->vertices.push_back(v);
-        mb->indices.push_back(top_index + i + 1);
         mb->indices.push_back(top_index);
+        mb->indices.push_back(top_index + i + 1);
     }
-    mb->indices.push_back(top_index + 1);
 }
 
 void
