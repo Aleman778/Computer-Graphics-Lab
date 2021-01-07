@@ -8,8 +8,8 @@ struct Basic_3D_Graphics_Scene {
     Basic_Shader basic_shader;
 
     World world;
-    Entity movable_cube;
-    Entity camera;
+    Entity_Handle movable_cube;
+    Entity_Handle camera;
 
     glm::vec3 movable_cube_position;
     
@@ -45,7 +45,7 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
         glm::vec3 pos(dist(rng)*3.0f, dist(rng)*2.0f, dist(rng) - 4.5f);
         glm::mat4 transform = glm::translate(glm::mat4(1.0f), pos);
 
-        Entity entity = spawn_entity(&scene->world);
+        Entity_Handle entity = spawn_entity(&scene->world);
         set_local_transform(&scene->world, entity, transform);
         set_mesh(&scene->world, entity, cuboid_mesh, material);
     }

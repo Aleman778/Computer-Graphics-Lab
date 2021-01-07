@@ -5,8 +5,8 @@
  ***************************************************************************/
 
 struct Player_Controller {
-    Entity player;
-    Entity camera;
+    Entity_Handle player;
+    Entity_Handle camera;
     glm::vec3 position;
     glm::vec2 rotation;
     f32 sensitivity;
@@ -14,7 +14,7 @@ struct Player_Controller {
 
 struct Simple_World_Scene {
     World world;
-    Entity camera;
+    Entity_Handle camera;
 
     Mesh mesh_cube;
     Mesh mesh_terrain;
@@ -187,7 +187,7 @@ initialize_scene(Simple_World_Scene* scene) {
 
     // Create world
     World* world = &scene->world;
-    Entity camera = spawn_entity(world);
+    Entity_Handle camera = spawn_entity(world);
     set_name(world, camera, "Player");
     scene->camera = camera;
     scene->world.main_camera = camera;
@@ -195,7 +195,7 @@ initialize_scene(Simple_World_Scene* scene) {
     set_local_transform(world, camera, camera_transform);
     set_perspective(world, camera);
 
-    Entity player = spawn_entity(world);
+    Entity_Handle player = spawn_entity(world);
     set_name(world, player, "Player");
     set_local_transform(world, player, camera_transform);
     scene->player_controller.player = player;
@@ -210,7 +210,7 @@ initialize_scene(Simple_World_Scene* scene) {
     sky_material.Sky.map = &scene->texture_sky;
     sky_material.Sky.shader = &scene->sky_shader;
 
-    Entity sky = spawn_entity(world);
+    Entity_Handle sky = spawn_entity(world);
     set_name(world, sky, "Sky");
     set_mesh(world, sky, scene->mesh_sky, sky_material);
 
@@ -222,7 +222,7 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_ground_material.Phong.shininess = 2.0f;
     snow_ground_material.Phong.shader = &scene->phong_shader;
 
-    Entity terrain = spawn_entity(world);
+    Entity_Handle terrain = spawn_entity(world);
     set_name(world, terrain, "Terrain");
     set_mesh(world, terrain, scene->mesh_terrain, snow_ground_material);
 
@@ -231,12 +231,12 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_material.Phong.specular_map = &scene->texture_snow_02_specular;
 
     // Create a snowman
-    Entity snowman_base = spawn_entity(world);
+    Entity_Handle snowman_base = spawn_entity(world);
     {
         set_name(world, snowman_base, "Snowman");
         set_mesh(world, snowman_base, scene->mesh_sphere, snow_material);
 
-        Entity snowman_middle = spawn_entity(world);
+        Entity_Handle snowman_middle = spawn_entity(world);
         set_name(world,   snowman_middle, "Snowman Middle");
         set_parent(world, snowman_middle, snowman_base);
         set_mesh(world,   snowman_middle, scene->mesh_sphere, snow_material);
@@ -252,7 +252,7 @@ initialize_scene(Simple_World_Scene* scene) {
         Material wood_material = carrot_material;
         wood_material.Phong.diffuse_color = glm::vec3(0.4f, 0.15f, 0.075f);
 
-        Entity snowman_arm_l = spawn_entity(world);
+        Entity_Handle snowman_arm_l = spawn_entity(world);
         set_name(world,   snowman_arm_l, "Snowman Arm L");
         set_parent(world, snowman_arm_l, snowman_middle);
         set_mesh(world,   snowman_arm_l, scene->mesh_cylinder, wood_material);
@@ -260,7 +260,7 @@ initialize_scene(Simple_World_Scene* scene) {
         rotate(world,     snowman_arm_l, glm::vec3(0.0f, 0.0f, half_pi+0.2f));
         scale(world,      snowman_arm_l, glm::vec3(0.3f, 1.0f, 0.3f));
 
-        Entity snowman_arm_r = spawn_entity(world);
+        Entity_Handle snowman_arm_r = spawn_entity(world);
         set_name(world,   snowman_arm_r, "Snowman Arm R");
         set_parent(world, snowman_arm_r, snowman_middle);
         set_mesh(world,   snowman_arm_r, scene->mesh_cylinder, wood_material);
@@ -268,14 +268,14 @@ initialize_scene(Simple_World_Scene* scene) {
         rotate(world,     snowman_arm_r, glm::vec3(0.0f, 0.0f, half_pi-0.2f));
         scale(world,      snowman_arm_r, glm::vec3(0.3f, 1.0f, 0.3f));
 
-        Entity snowman_head = spawn_entity(world);
+        Entity_Handle snowman_head = spawn_entity(world);
         set_name(world,   snowman_head, "Snowman Head");
         set_parent(world, snowman_head, snowman_middle);
         set_mesh(world,   snowman_head, scene->mesh_sphere, snow_material);
         translate(world,  snowman_head, glm::vec3(0.0f, 1.3f, 0.0f));
         scale(world,      snowman_head, glm::vec3(0.7f));
 
-        Entity snowman_carrot = spawn_entity(world);
+        Entity_Handle snowman_carrot = spawn_entity(world);
         set_name(world,   snowman_carrot, "Snowman Carrot");
         set_mesh(world,   snowman_carrot, scene->mesh_cone, carrot_material);
         set_parent(world, snowman_carrot, snowman_head);
@@ -284,7 +284,7 @@ initialize_scene(Simple_World_Scene* scene) {
 
     // Create copies of the snowman
     for (int i = 0; i < 30; i++) {
-        Entity snowman_copy = copy_entity(world, snowman_base);
+        Entity_Handle snowman_copy = copy_entity(world, snowman_base);
 
         Transform tr = {};
         f32 scale = comp(rng)*0.8f+0.2f;
@@ -332,7 +332,7 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     ImGui::Begin("Hierarchy", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
     if (ImGui::TreeNode("World")) {
         for (int i = 0; i < scene->world.generations.size(); i++) {
-            Entity entity = make_entity(i, scene->world.generations[i]);
+            Entity_Handle entity = make_entity_handle(i, scene->world.generations[i]);
             if (ImGui::TreeNodeEx(lookup_name(&scene->world, entity).c_str(), ImGuiTreeNodeFlags_Leaf)) {
                 ImGui::TreePop();
             }

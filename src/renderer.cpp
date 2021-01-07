@@ -17,8 +17,6 @@ create_mesh_from_builder(Mesh_Builder* mb) {
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex)*vertex_count, &mb->vertices[0].pos.x, GL_STATIC_DRAW);
 
-    printf("create_mesh ... vertex_count = %d, index_count = %d\n", (int) vertex_count, (int) index_count);
-
     // Create index buffer
     if (index_count > 0) {
         glGenBuffers(1, &mesh.ibo);

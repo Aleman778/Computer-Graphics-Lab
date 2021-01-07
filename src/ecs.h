@@ -10,26 +10,65 @@
  * of the entity id. The upper 8 bits are used for generation which differentiate
  * between nodes that reuse the same (previously deleted nodes) index.
  */
-struct Entity {
+struct Entity_Handle {
     u32 id;
 };
 
 inline bool
-operator==(const Entity& a, const Entity& b) {
+operator==(const Entity_Handle& a, const Entity_Handle& b) {
     return a.id == b.id;
 }
 
 namespace std {
     template <>
-    struct hash<Entity> {
-        std::size_t operator()(const Entity& k) const {
+    struct hash<Entity_Handle> {
+        std::size_t operator()(const Entity_Handle& k) const {
             return std::hash<u32>()(k.id);
         }
     };
 }
 
+/***************************************************************************
+ * Component
+ ***************************************************************************/
+
+static u32 next_component_id = 0;
+
+#define REGISTER_COMPONENT(type) \
+    static const u32 type ## _ID = next_component_id++;    \
+    static const u32 type ## _SIZE = sizeof(type)
+
+struct Local_To_World {
+    glm::mat4 matrix;
+};
+
+struct Mesh_Renderer {
+    Mesh mesh;
+    Material material;
+};
+
+struct View_Projection {
+    glm::mat4 view;
+    glm::mat4 projection;
+};
+
+struct Point_Light {
+    glm::vec3 color;
+    f32 intensity;
+    f32 distance;
+};
+
+REGISTER_COMPONENT(Local_To_World);
+REGISTER_COMPONENT(Mesh_Renderer);
+REGISTER_COMPONENT(View_Projection);
+REGISTER_COMPONENT(Point_Light);
+
+/***************************************************************************
+ * Old Component data FIXME remove all this later
+ ***************************************************************************/
+
 struct Debug_Names {
-    std::unordered_map<Entity, std::string> map;
+    std::unordered_map<Entity_Handle, std::string> map;
 };
 
 /**
@@ -40,7 +79,7 @@ struct Transform_Data {
     u32 count;
     u32 capacity;
 
-    Entity* entity;
+    Entity_Handle* entity;
     glm::mat4* local;
     glm::mat4* world;
     u32* parent; // index into this lists
@@ -53,7 +92,7 @@ struct Transform_Data {
  * Manages all the registered transform components.
  */
 struct Transforms {
-    std::unordered_map<Entity, u32> map;
+    std::unordered_map<Entity_Handle, u32> map;
     Transform_Data data;
 };
 
@@ -65,7 +104,7 @@ struct Mesh_Data {
     u32 count;
     u32 capacity;
 
-    Entity* entity;
+    Entity_Handle* entity;
     Mesh* mesh;
     Material* material;
 };
@@ -74,7 +113,7 @@ struct Mesh_Data {
  * Manages all the registered mesh renderer components.
  */
 struct Mesh_Renderers {
-    std::unordered_map<Entity, u32> map;
+    std::unordered_map<Entity_Handle, u32> map;
     Mesh_Data data;
 };
 
@@ -83,7 +122,7 @@ struct Mesh_Renderers {
  * so the memory layout does not matter as much here.
  */
 struct Camera_Data {
-    Entity entity;
+    Entity_Handle entity;
     f32 fov;
     f32 left;
     f32 right;
@@ -102,7 +141,22 @@ struct Camera_Data {
  * Manages all the registered camera components.
  */
 struct Cameras {
-    std::unordered_map<Entity, Camera_Data> map;
+    std::unordered_map<Entity_Handle, Camera_Data> map;
+};
+
+typedef void (*OnUpdateSystem)(f32 dt, void** components);
+
+/**
+ * Handle to a particular instance of a component.
+ */
+struct Component_Handle {
+    u32 id;
+    u32 offset; // in bytes
+};
+
+struct Entity {
+    Entity_Handle handle;
+    std::vector<Component_Handle> components;
 };
 
 /**
@@ -112,12 +166,16 @@ struct World {
     std::vector<u8> generations;
     std::deque<u32> removed_entity_indices;
 
+    std::vector<Entity> entities; // all the live entities
+    std::vector<u32> handles; // lookup entity by handle, NOTE: only valid if the entity itself is alive!!!
+    std::unordered_map<u32, std::vector<u8>> components; // where component data is stored
+    
     Debug_Names names;
     Transforms transforms;
     Mesh_Renderers mesh_renderers;
     Cameras cameras;
 
-    Entity main_camera;
+    Entity_Handle main_camera;
 
     Light_Setup light_setup;
     f32 fog_density;
@@ -126,28 +184,24 @@ struct World {
     bool depth_testing;
 };
 
-inline u32 get_entity_index(Entity entity);
-inline u8 get_entitiy_generation(Entity entity);
-inline Entity make_entity(u32 index, u8 generation);
+Entity_Handle spawn_entity(World* world);
+void despawn_entity(World* world, Entity_Handle entity);
+Entity_Handle copy_entity(World* world, Entity_Handle entity);
+inline bool is_alive(World* world, Entity_Handle entity);
 
-Entity spawn_entity(World* world);
-void despawn_entity(World* world, Entity entity);
-Entity copy_entity(World* world, Entity entity);
-inline bool is_alive(World* world, Entity entity);
+std::string lookup_name(World* world, Entity_Handle entity);
+void set_name(World* world, Entity_Handle entity, const char* name);
 
-std::string lookup_name(World* world, Entity entity);
-void set_name(World* world, Entity entity, const char* name);
+void set_local_transform(World* world, Entity_Handle entity, const glm::mat4& m);
+void destroy_transform(World* world, Entity_Handle entity);
+void set_parent(World* world, Entity_Handle entity, Entity_Handle parent_entity);
+void copy_transform(World* world, Entity_Handle entity, Entity_Handle copied_entity);
 
-void set_local_transform(World* world, Entity entity, const glm::mat4& m);
-void destroy_transform(World* world, Entity entity);
-void set_parent(World* world, Entity entity, Entity parent_entity);
-void copy_transform(World* world, Entity entity, Entity copied_entity);
-
-void set_mesh(World* world, Entity entity, Mesh mesh, Material material);
-void copy_mesh(World* world, Entity entity, Entity copied_entity);
+void set_mesh(World* world, Entity_Handle entity, Mesh mesh, Material material);
+void copy_mesh(World* world, Entity_Handle entity, Entity_Handle copied_entity);
 
 void set_perspective(World* world,
-                     Entity entity,
+                     Entity_Handle entity,
                      f32 fov=glm::radians(90.0f),
                      f32 near=0.1f,
                      f32 far=100000.0f,
@@ -155,7 +209,7 @@ void set_perspective(World* world,
                      glm::vec4 viewport=glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
 
 void set_orthographic(World* world,
-                      Entity entity,
+                      Entity_Handle entity,
                       f32 left,
                       f32 right,
                       f32 top,
@@ -163,5 +217,5 @@ void set_orthographic(World* world,
                       f32 near=0,
                       f32 far=0,
                       glm::vec4 viewport=glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
-    
+
 void render_world(World* world);

@@ -3,8 +3,8 @@
  * Entity management
  ***************************************************************************/
 
-static constexpr usize default_min_entities = 100;
-
+static constexpr usize default_component_capacity = 10; // TODO(alexander): tweak this
+    
 static constexpr usize min_removed_indices = 1024;
 
 static constexpr usize entity_index_bits = 24;
@@ -13,56 +13,120 @@ static constexpr usize entity_index_mask = (1<<entity_index_bits) - 1;
 static constexpr usize entity_generation_bits = 8;
 static constexpr usize entity_generation_mask = (1<<entity_generation_bits) - 1;
 
-inline u32
-get_entity_index(Entity entity) {
+static inline u32
+get_entity_index(Entity_Handle entity) {
     return entity.id & entity_index_mask;
 }
 
-inline u8
-get_entity_generation(Entity entity) {
+static inline u8
+get_entity_generation(Entity_Handle entity) {
     return (u8) ((entity.id >> entity_index_bits) & entity_generation_mask);
 }
 
-inline Entity
-make_entity(u32 index, u8 generation) {
-    Entity entity = { index | (generation << entity_index_bits) };
+static inline Entity_Handle
+make_entity_handle(u32 index, u8 generation) {
+    Entity_Handle entity = { index | (generation << entity_index_bits) };
     return entity;
 }
 
-Entity
+Entity_Handle
 spawn_entity(World* world) {
     u32 index;
     if (world->removed_entity_indices.size() > min_removed_indices) {
         index = world->removed_entity_indices[0];
         world->removed_entity_indices.pop_front();
+        world->handles[index] = world->entities.size();
     } else {
         index = (u32) world->generations.size();
         assert(index < (1 << entity_index_bits));
         world->generations.push_back(0);
+        world->handles.push_back(world->entities.size());
     }
-    return make_entity(index, world->generations[index]);
+    
+    Entity_Handle entity = make_entity_handle(index, world->generations[index]);
+    world->entities.push_back({});
+    return entity;
 }
 
 void
-despawn_entity(World* world, Entity entity) {
+despawn_entity(World* world, Entity_Handle entity) {
     u32 index = get_entity_index(entity);
     world->generations[index]++;
     world->removed_entity_indices.push_back(index);
-    destroy_transform(world, entity);
+
+    u32 entity_index = world->handles[index];
+    std::iter_swap(world->entities.begin() + entity_index, world->entities.end() - 1);
+    std::iter_swap(world->handles.begin()  + index,        world->handles.end()  - 1);
+    world->handles[index] = entity_index;
+    world->entities.pop_back();
+    world->handles.pop_back();
 }
 
-Entity
-copy_entity(World* world, Entity entity) {
+Entity_Handle
+copy_entity(World* world, Entity_Handle entity) {
     assert(is_alive(world, entity));
-    Entity copy = spawn_entity(world);
+    Entity_Handle copy = spawn_entity(world); // TODO(alexander): manage new entity manager later!
     copy_transform(world, entity, copy);
     copy_mesh(world, entity, copy);
     return copy;
 }
 
+inline Entity*
+get_entity(World* world, Entity_Handle handle) {
+    int i = world->handles[get_entity_index(handle)];
+    return &world->entities[i];
+}
+
 inline bool
-is_alive(World* world, Entity entity) {
+is_alive(World* world, Entity_Handle entity) {
     return world->generations[get_entity_index(entity)] == get_entity_generation(entity);
+}
+
+/***************************************************************************
+ * Component management
+ ***************************************************************************/
+
+#define add_component(world, handle, type) \
+    (type*) _add_component(world, handle, type ## _ID, type ## _SIZE)
+
+void*
+_add_component(World* world, Entity_Handle handle, u32 id, usize size) {
+    assert(is_alive(world, handle) && "cannot add component to despawned entity");
+
+    if (world->components.find(id) == world->components.end()) {
+        world->components[id] = std::vector<u8>(size*default_component_capacity);
+    }
+
+    std::vector<u8>& memory = world->components[id];
+    usize curr_size = memory.size();
+    memory.resize(curr_size + size + sizeof(Entity_Handle)); // TODO(alexander): use custom allocator
+
+    // NOTE(alexander): each component data needs to keep track of its owner handle
+    Entity* entity = get_entity(world, handle);
+    *((Entity_Handle*) &memory[curr_size]) = entity->handle;
+    curr_size += sizeof(Entity_Handle);
+
+    Component_Handle component = { id, curr_size };
+    entity->components.push_back(component);
+    return &memory[curr_size];
+}
+
+#define remove_component(world, handle, type) \
+    _remove_component(world, handle, type ## _ID, type ## _SIZE)
+
+bool
+_remove_component(World* world, Entity_Handle handle, u32 id, usize size) {
+    assert(is_alive(world, handle) && "cannot remove component from despawned entity");
+
+    Entity* entity = get_entity(handle);
+    for (int i = 0; i < entity->components.size(); i++) {
+        if (component->id == id) {
+            std::vector<u8>& memory = world->components[id]; // TODO(alexander): use custom allocator
+            memory 
+        }
+    }
+    
+    return false;
 }
 
 /***************************************************************************
@@ -70,7 +134,7 @@ is_alive(World* world, Entity entity) {
  ***************************************************************************/
 
 std::string
-lookup_name(World* world, Entity entity) {
+lookup_name(World* world, Entity_Handle entity) {
     if (world->names.map.find(entity) != world->names.map.end()) {
         return world->names.map[entity];
     }
@@ -78,7 +142,7 @@ lookup_name(World* world, Entity entity) {
 }
 
 void
-set_name(World* world, Entity entity, const char* name) {
+set_name(World* world, Entity_Handle entity, const char* name) {
     world->names.map[entity] = std::string(name);
 }
 
@@ -100,9 +164,9 @@ ensure_transform_capacity(Transform_Data* data, usize new_capacity) {
         }
         if (new_capacity > new_data.capacity) new_data.capacity = new_capacity;
 
-        u32 size = new_data.capacity*(sizeof(Entity) + 2*sizeof(glm::mat4) + 4*sizeof(u32));
+        u32 size = new_data.capacity*(sizeof(Entity_Handle) + 2*sizeof(glm::mat4) + 4*sizeof(u32));
         new_data.buffer       = (u8*) malloc(size);
-        new_data.entity       = (Entity*)     new_data.buffer;
+        new_data.entity       = (Entity_Handle*)     new_data.buffer;
         new_data.local        = (glm::mat4*) (new_data.entity + new_data.capacity);
         new_data.world        = (glm::mat4*) (new_data.local + new_data.capacity);
         new_data.parent       = (u32*)       (new_data.world + new_data.capacity);
@@ -112,7 +176,7 @@ ensure_transform_capacity(Transform_Data* data, usize new_capacity) {
 
         if (data->buffer && data->count > 0) {
             data->count += 1;
-            memcpy(new_data.entity, data->entity, data->count*sizeof(Entity));
+            memcpy(new_data.entity, data->entity, data->count*sizeof(Entity_Handle));
             memcpy(new_data.local, data->local, data->count*sizeof(glm::mat4));
             memcpy(new_data.world, data->world, data->count*sizeof(glm::mat4));
             memcpy(new_data.parent, data->parent, data->count*sizeof(u32));
@@ -127,7 +191,7 @@ ensure_transform_capacity(Transform_Data* data, usize new_capacity) {
 }
 
 static inline u32
-lookup_transform(Transforms* transforms, Entity entity) {
+lookup_transform(Transforms* transforms, Entity_Handle entity) {
     if (transforms->map.find(entity) != transforms->map.end()) {
         return transforms->map[entity];
     }
@@ -135,7 +199,7 @@ lookup_transform(Transforms* transforms, Entity entity) {
 }
 
 static u32
-create_transform(Transforms* transforms, Entity entity) {
+create_transform(Transforms* transforms, Entity_Handle entity) {
     u32 index = transforms->data.count + 1;
     transforms->map[entity] = index;
     ensure_transform_capacity(&transforms->data, index + 1);
@@ -163,7 +227,7 @@ set_transform(Transform_Data* data, const glm::mat4& parent, u32 index) {
 }
 
 void
-set_local_transform(World* world, Entity entity, const glm::mat4& m) {
+set_local_transform(World* world, Entity_Handle entity, const glm::mat4& m) {
     Transform_Data* data = &world->transforms.data;
     u32 index = lookup_transform(&world->transforms, entity);
     if (!index) {
@@ -177,14 +241,14 @@ set_local_transform(World* world, Entity entity, const glm::mat4& m) {
 }
 
 void
-translate(World* world, Entity entity, const glm::vec3& v) {
+translate(World* world, Entity_Handle entity, const glm::vec3& v) {
     Transform_Data* data = &world->transforms.data;
     u32 index = lookup_transform(&world->transforms, entity);
     if (!index) {
         index = create_transform(&world->transforms, entity);
         data->local[index] = glm::mat4(1.0f);
     }
-    
+
     data->local[index] = glm::translate(data->local[index], v);
     u32 parent = data->parent[index];
     glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
@@ -192,14 +256,14 @@ translate(World* world, Entity entity, const glm::vec3& v) {
 }
 
 void
-rotate(World* world, Entity entity, const glm::vec3& v) {
+rotate(World* world, Entity_Handle entity, const glm::vec3& v) {
     Transform_Data* data = &world->transforms.data;
     u32 index = lookup_transform(&world->transforms, entity);
     if (!index) {
         index = create_transform(&world->transforms, entity);
         data->local[index] = glm::mat4(1.0f);
     }
-    
+
     data->local[index] *= glm::toMat4(glm::quat(v));
     u32 parent = data->parent[index];
     glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
@@ -207,14 +271,14 @@ rotate(World* world, Entity entity, const glm::vec3& v) {
 }
 
 void
-scale(World* world, Entity entity, const glm::vec3& v) {
+scale(World* world, Entity_Handle entity, const glm::vec3& v) {
     Transform_Data* data = &world->transforms.data;
     u32 index = lookup_transform(&world->transforms, entity);
     if (!index) {
         index = create_transform(&world->transforms, entity);
         data->local[index] = glm::mat4(1.0f);
     }
-    
+
     data->local[index] = glm::scale(data->local[index], v);
     u32 parent = data->parent[index];
     glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
@@ -222,7 +286,7 @@ scale(World* world, Entity entity, const glm::vec3& v) {
 }
 
 glm::mat4
-get_world_transform(World* world, Entity entity) {
+get_world_transform(World* world, Entity_Handle entity) {
     u32 index = lookup_transform(&world->transforms, entity);
     if (index) {
         return world->transforms.data.world[index];
@@ -231,7 +295,7 @@ get_world_transform(World* world, Entity entity) {
 }
 
 void
-set_parent(World* world, Entity entity, Entity parent_entity) {
+set_parent(World* world, Entity_Handle entity, Entity_Handle parent_entity) {
     Transform_Data* data = &world->transforms.data;
     u32 child = lookup_transform(&world->transforms, entity);
     u32 parent = lookup_transform(&world->transforms, parent_entity);
@@ -276,7 +340,7 @@ set_parent(World* world, Entity entity, Entity parent_entity) {
 }
 
 void
-copy_transform(World* world, Entity entity, Entity copied_entity) {
+copy_transform(World* world, Entity_Handle entity, Entity_Handle copied_entity) {
     Transform_Data* data = &world->transforms.data;
     u32 i = lookup_transform(&world->transforms, entity);
     if (!i) return;
@@ -284,16 +348,16 @@ copy_transform(World* world, Entity entity, Entity copied_entity) {
     u32 copy = lookup_transform(&world->transforms, copied_entity);
     if (!copy) copy = create_transform(&world->transforms, copied_entity);
 
-    data->entity[copy]       = data->entity[i];
-    data->local[copy]        = data->local[i];
-    data->world[copy]        = data->world[i];
-    data->parent[copy]       = 0;
+    data->entity[copy] = data->entity[i];
+    data->local[copy]  = data->local[i];
+    data->world[copy]  = data->world[i];
+    data->parent[copy] = 0;
 
     if (data->first_child[i]) {
         u32 child = data->first_child[i];
         u32 child_copy = 0;
         if (child) {
-            Entity entity_copy = copy_entity(world, data->entity[child]);
+            Entity_Handle entity_copy = copy_entity(world, data->entity[child]);
             child_copy = lookup_transform(&world->transforms, entity_copy);
             assert(child_copy && "unexpected missing child node");
             data->first_child[copy] = child_copy;
@@ -302,7 +366,7 @@ copy_transform(World* world, Entity entity, Entity copied_entity) {
 
         child = data->next_sibling[child];
         while (child && child_copy) {
-            Entity entity_copy = copy_entity(world, data->entity[child]);
+            Entity_Handle entity_copy = copy_entity(world, data->entity[child]);
             u32 next_child_copy = lookup_transform(&world->transforms, entity_copy);
             assert(next_child_copy && "unexpected missing child node");
             data->next_sibling[child_copy] = next_child_copy;
@@ -315,12 +379,12 @@ copy_transform(World* world, Entity entity, Entity copied_entity) {
 }
 
 void
-destroy_transform(World* world, Entity entity) {
+destroy_transform(World* world, Entity_Handle entity) {
     Transform_Data* data = &world->transforms.data;
     u32 i = lookup_transform(&world->transforms, entity);
     if (i) {
         u32 last = data->count - 1;
-        Entity last_entity = data->entity[last];
+        Entity_Handle last_entity = data->entity[last];
 
         // Update subling linked list pointers
         u32 prev_sibling = data->prev_sibling[i];
@@ -366,15 +430,15 @@ ensure_mesh_data_capacity(Mesh_Data* data, usize new_capacity) {
         }
         if (new_capacity > new_data.capacity) new_data.capacity = new_capacity;
 
-        u32 size = new_data.capacity*(sizeof(Entity) + sizeof(Mesh) + sizeof(Material));
+        u32 size = new_data.capacity*(sizeof(Entity_Handle) + sizeof(Mesh) + sizeof(Material));
         new_data.buffer   = (u8*) malloc(size);
-        new_data.entity   = (Entity*)    new_data.buffer;
+        new_data.entity   = (Entity_Handle*)    new_data.buffer;
         new_data.mesh     = (Mesh*)     (new_data.entity + new_data.capacity);
         new_data.material = (Material*) (new_data.mesh + new_data.capacity);
 
         if (data->buffer && data->count > 0) {
             data->count += 1;
-            memcpy(new_data.entity, data->entity, data->count*sizeof(Entity));
+            memcpy(new_data.entity, data->entity, data->count*sizeof(Entity_Handle));
             memcpy(new_data.mesh, data->mesh, data->count*sizeof(Mesh));
             memcpy(new_data.material, data->material, data->count*sizeof(Material));
             free(data->buffer);
@@ -385,7 +449,7 @@ ensure_mesh_data_capacity(Mesh_Data* data, usize new_capacity) {
 }
 
 static inline u32
-lookup_mesh(Mesh_Renderers* mesh_renderers, Entity entity) {
+lookup_mesh(Mesh_Renderers* mesh_renderers, Entity_Handle entity) {
     if (mesh_renderers->map.find(entity) != mesh_renderers->map.end()) {
         return mesh_renderers->map[entity];
     }
@@ -393,7 +457,7 @@ lookup_mesh(Mesh_Renderers* mesh_renderers, Entity entity) {
 }
 
 void
-set_mesh(World* world, Entity entity, Mesh mesh, Material material) {
+set_mesh(World* world, Entity_Handle entity, Mesh mesh, Material material) {
     Mesh_Renderers* mesh_renderers = &world->mesh_renderers;
     u32 index = lookup_mesh(mesh_renderers, entity);
     if (!index) {
@@ -409,7 +473,7 @@ set_mesh(World* world, Entity entity, Mesh mesh, Material material) {
 }
 
 void
-copy_mesh(World* world, Entity entity, Entity copied_entity) {
+copy_mesh(World* world, Entity_Handle entity, Entity_Handle copied_entity) {
     Mesh_Renderers* mesh_renderers = &world->mesh_renderers;
     u32 index = lookup_mesh(mesh_renderers, entity);
     if (index) {
@@ -427,7 +491,7 @@ copy_mesh(World* world, Entity entity, Entity copied_entity) {
  ***************************************************************************/
 
 inline Camera_Data*
-lookup_camera(Cameras* cameras, Entity entity) {
+lookup_camera(Cameras* cameras, Entity_Handle entity) {
     if (cameras->map.find(entity) != cameras->map.end()) {
         return &cameras->map[entity];
     }
@@ -436,7 +500,7 @@ lookup_camera(Cameras* cameras, Entity entity) {
 
 void
 set_perspective(World* world,
-                Entity entity,
+                Entity_Handle entity,
                 f32 fov,
                 f32 near,
                 f32 far,
@@ -459,7 +523,7 @@ set_perspective(World* world,
 
 void
 set_orthographic(World* world,
-                 Entity entity,
+                 Entity_Handle entity,
                  f32 left,
                  f32 right,
                  f32 bottom,
@@ -494,7 +558,7 @@ set_orthographic(World* world,
 }
 
 void
-adjust_camera_to_fill_window(World* world, Entity entity, int width, int height) {
+adjust_camera_to_fill_window(World* world, Entity_Handle entity, int width, int height) {
     Camera_Data* camera = lookup_camera(&world->cameras, entity);
     assert(camera && "entity is missing a camera component");
 
@@ -561,7 +625,7 @@ render_world(World* world) {
     Transform_Data* transform_data = &world->transforms.data;
 
     for (u32 i = 1; i < rendering_data->count + 1; i++) {
-        Entity entity = rendering_data->entity[i];
+        Entity_Handle entity = rendering_data->entity[i];
         if (!is_alive(world, entity)) continue;
 
         glm::mat4 model_matrix = get_world_transform(world, entity);
@@ -581,3 +645,26 @@ render_world(World* world) {
 
     end_frame();
 }
+
+// void
+// render_meshe(World* world, u8** components, u32 count) {
+//     Mesh_Renderer* renderer = (Mesh_Renderer*) components[0];
+//     Local_To_World* local_to_world = (Local_To_World*) components[1];
+
+//     Entity_Handle entity = rendering_data->entity[i];
+//     if (!is_alive(world, entity)) continue;
+
+//     glm::mat4 model_matrix = get_world_transform(world, entity);
+//     const Material material = rendering_data->material[i];
+//     const Mesh mesh = rendering_data->mesh[i];
+
+//     if (material.type != prev_material) {
+//         apply_material(material,
+//                        &world->light_setup,
+//                        world->clear_color,
+//                        world->fog_density,
+//                        world->fog_gradient);
+//     }
+
+//     draw_mesh(mesh, material, model_matrix, view_matrix, projection_matrix, view_proj_matrix);
+// }
