@@ -1,13 +1,13 @@
 
 /**
- * Entities are represented by an identifier that contains both index and generation.
+ * Entities handles are represented by an identifier that contains both index and generation.
  *  31        24 23                                           0
  * +------------+----------------------------------------------+
  * | generation | index                                        |
  * +------------+----------------------------------------------+
  *
  * Entities are stored in a contiguous array indexed by the first 24 bits
- * of the entity id. The upper 8 bits are used for generation which differentiate
+ * of the entity handle id. The upper 8 bits are used for generation which differentiate
  * between nodes that reuse the same (previously deleted nodes) index.
  */
 struct Entity_Handle {
@@ -154,6 +154,9 @@ struct Component_Handle {
     u32 offset; // in bytes
 };
 
+/**
+ * An entity is just an array of components that is identified by its handle.
+ */
 struct Entity {
     Entity_Handle handle;
     std::vector<Component_Handle> components;

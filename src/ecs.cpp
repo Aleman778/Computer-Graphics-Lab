@@ -29,6 +29,17 @@ make_entity_handle(u32 index, u8 generation) {
     return entity;
 }
 
+inline Entity*
+get_entity(World* world, Entity_Handle handle) {
+    int i = world->handles[get_entity_index(handle)];
+    return &world->entities[i];
+}
+
+inline bool
+is_alive(World* world, Entity_Handle entity) {
+    return world->generations[get_entity_index(entity)] == get_entity_generation(entity);
+}
+
 Entity_Handle
 spawn_entity(World* world) {
     u32 index;
@@ -55,8 +66,7 @@ despawn_entity(World* world, Entity_Handle entity) {
     world->removed_entity_indices.push_back(index);
 
     u32 entity_index = world->handles[index];
-    std::iter_swap(world->entities.begin() + entity_index, world->entities.end() - 1);
-    std::iter_swap(world->handles.begin()  + index,        world->handles.end()  - 1);
+    world->entities[entity_index] = world->entities[world->entities.size() - 1];
     world->handles[index] = entity_index;
     world->entities.pop_back();
     world->handles.pop_back();
@@ -71,17 +81,6 @@ copy_entity(World* world, Entity_Handle entity) {
     return copy;
 }
 
-inline Entity*
-get_entity(World* world, Entity_Handle handle) {
-    int i = world->handles[get_entity_index(handle)];
-    return &world->entities[i];
-}
-
-inline bool
-is_alive(World* world, Entity_Handle entity) {
-    return world->generations[get_entity_index(entity)] == get_entity_generation(entity);
-}
-
 /***************************************************************************
  * Component management
  ***************************************************************************/
@@ -94,7 +93,7 @@ _add_component(World* world, Entity_Handle handle, u32 id, usize size) {
     assert(is_alive(world, handle) && "cannot add component to despawned entity");
 
     if (world->components.find(id) == world->components.end()) {
-        world->components[id] = std::vector<u8>(size*default_component_capacity);
+        world->components[id].reserve(size*default_component_capacity);
     }
 
     std::vector<u8>& memory = world->components[id];
@@ -118,11 +117,31 @@ bool
 _remove_component(World* world, Entity_Handle handle, u32 id, usize size) {
     assert(is_alive(world, handle) && "cannot remove component from despawned entity");
 
-    Entity* entity = get_entity(handle);
+    Entity* entity = get_entity(world, handle);
     for (int i = 0; i < entity->components.size(); i++) {
-        if (component->id == id) {
+        Component_Handle& component = entity->components[i];
+        
+        if (component.id == id) {
             std::vector<u8>& memory = world->components[id]; // TODO(alexander): use custom allocator
-            memory 
+            usize last_index = memory.size() - size - sizeof(Entity_Handle);
+            Entity_Handle* last = (Entity_Handle*) &memory[last_index];
+
+            if (component.offset != last_index) {
+                Entity* last_entity = get_entity(world, *last);
+                for (auto last_component : last_entity->components) {
+                    if (last_component.id == component.id && last_component.offset == last_index) {
+                        last_component.offset = component.offset;
+                        break;
+                    }
+                }
+                
+                memcpy(&memory[component.id], last, size + sizeof(Entity_Handle));
+            }
+            
+            memory.resize(last_index);
+            
+            entity->components[i] = entity->components[entity->components.size() - 1];
+            entity->components.pop_back();
         }
     }
     

@@ -230,6 +230,11 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
     snow_material.Phong.specular_map = &scene->texture_snow_02_specular;
 
+    Entity_Handle test_entity = spawn_entity(world);
+    auto local_to_world = add_component(world, test_entity, Local_To_World);
+    local_to_world->matrix = glm::mat4(1.0f);
+    remove_component(world, test_entity, Local_To_World);
+
     // Create a snowman
     Entity_Handle snowman_base = spawn_entity(world);
     {
