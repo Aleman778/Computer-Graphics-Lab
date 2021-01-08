@@ -54,9 +54,11 @@ spawn_entity(World* world) {
         world->handles.push_back(world->entities.size());
     }
 
-    Entity_Handle entity = make_entity_handle(index, world->generations[index]);
-    world->entities.push_back({});
-    return entity;
+    Entity entity = {};
+    Entity_Handle handle = make_entity_handle(index, world->generations[index]);
+    entity.handle = handle;
+    world->entities.push_back(entity);
+    return handle;
 }
 
 void
@@ -92,7 +94,7 @@ copy_entity(World* world, Entity_Handle entity) {
 #define get_component(world, handle, type) \
     (type*) _get_component(world, get_entity(world, handle), type ## _ID, type ## _SIZE, count)
 
-static void*
+void*
 _add_component(World* world, Entity* entity, u32 id, usize size) {
     assert(is_alive(world, entity->handle) && "cannot add component to despawned entity");
 
@@ -102,7 +104,7 @@ _add_component(World* world, Entity* entity, u32 id, usize size) {
 
     std::vector<u8>& memory = world->components[id];
     usize curr_size = memory.size();
-    memory.resize(curr_size + size + sizeof(Entity_Handle)); // TODO(alexander): use custom allocator
+    memory.resize(curr_size + size); // TODO(alexander): use custom allocator
 
     // NOTE(alexander): each component data needs to keep track of its owner handle
     *((Entity_Handle*) &memory[curr_size]) = entity->handle;
@@ -113,7 +115,7 @@ _add_component(World* world, Entity* entity, u32 id, usize size) {
     return &memory[curr_size];
 }
 
-static bool
+bool
 _remove_component(World* world, Entity* entity, u32 id, usize size) {
     assert(is_alive(world, entity->handle) && "cannot remove component from despawned entity");
 
@@ -135,7 +137,7 @@ _remove_component(World* world, Entity* entity, u32 id, usize size) {
                     }
                 }
 
-                memcpy(&memory[component.id], last, size + sizeof(Entity_Handle));
+                memcpy(&memory[component.id], last, size);
             }
 
             memory.resize(last_index);
@@ -148,7 +150,7 @@ _remove_component(World* world, Entity* entity, u32 id, usize size) {
     return false;
 }
 
-static void*
+void*
 _get_component(World* world, Entity* entity, u32 id, usize size) {
     assert(is_alive(world, entity->handle) && "cannot get component from despawned entity");
     
@@ -193,6 +195,14 @@ _use_component(System* system, u32 id, u32 size, u32 flags=0) {
 void
 register_system(World* world, System system) {
     assert(system.component_ids.size() > 0 && "expected system to use at least one component");
+    bool is_valid = false;
+    for (int i = 0; i < system.component_flags.size(); i++) {
+        if ((system.component_flags[i] & System::Flag_Optional) == 0) {
+            is_valid = true;
+            break;
+        }
+    }
+    assert(is_valid && "invalid system, all components cannot be optional");
     world->systems.push_back(system);
 }
 
@@ -206,7 +216,7 @@ update_systems(World* world, f32 dt) {
 
         if (system->component_ids.size() == 1) {
             u32 id = system->component_ids[0];
-            u32 size = system->component_sizes[0] + sizeof(Entity_Handle);
+            u32 size = system->component_sizes[0];
             std::vector<u8>& data = world->components[id];
             for (int j = 0; j < data.size(); j += size) {
                 Entity_Handle handle = *((Entity_Handle*) &data[j]);
@@ -227,21 +237,20 @@ update_systems(World* world, f32 dt) {
                 }
 
                 u32 id = system->component_ids[0];
-                u32 size = system->component_sizes[0] + sizeof(Entity_Handle);
+                u32 size = system->component_sizes[0];
                 if (size <= min_size) {
                     min_size = size;
                     min_index = i;
                 }
             }
-
-            min_size += sizeof(Entity_Handle);
-            assert(min_index == (u32) -1);
+            assert(min_index < component_params.size());
 
             std::vector<u8>& data = *component_data[min_index];
             for (int j = 0; j < data.size(); j += min_size) {
                 Entity_Handle handle = *((Entity_Handle*) &data[j]);
                 Entity* entity = get_entity(world, handle);
-
+                component_params[min_index] = &data[j + sizeof(Entity_Handle)];
+                
                 bool is_valid = true;
                 for (int k = 0; k < system->component_ids.size(); k++) {
                     if (k == min_index) continue;
@@ -249,8 +258,7 @@ update_systems(World* world, f32 dt) {
                                                          entity,
                                                          system->component_ids[k],
                                                          system->component_sizes[k]);
-                    if (component_params[k] == NULL &&
-                        (system->component_flags[k] & System::Flag_Optional) == 0) {
+                    if (component_params[k] == NULL && (system->component_flags[k] & System::Flag_Optional) == 0) {
                         is_valid = false;
                         break;
                     }
@@ -262,6 +270,37 @@ update_systems(World* world, f32 dt) {
             }
         }
     }
+}
+
+/***************************************************************************
+ * Basic Non-hierarchical Transform System
+ ***************************************************************************/
+
+void
+trs_local_to_world_system(f32 dt, Entity_Handle handle, void** components) {
+    auto world = (Local_To_World*) components[0];
+    auto pos = (Position*) components[1];
+    auto rot = (Rotation*) components[2];
+    auto scl = (Scale*) components[3];
+
+    pos->v.x += 1.0f;
+
+    glm::mat4 T = pos ? glm::translate(glm::mat4(1.0f), pos->v) : glm::mat4(1.0f);
+    glm::mat4 R = rot ? glm::toMat4(rot->q)                     : glm::mat4(1.0f);
+    glm::mat4 S = scl ? glm::scale(glm::mat4(1.0f), scl->v)     : glm::mat4(1.0f);
+
+    world->m = T * R * S;
+}
+
+void
+register_transform_system(World* world) {
+    System system = {};
+    system.on_update = &trs_local_to_world_system;
+    use_component(&system, Local_To_World);
+    use_component(&system, Position, System::Flag_Optional);
+    use_component(&system, Rotation, System::Flag_Optional);
+    use_component(&system, Scale,    System::Flag_Optional);
+    register_system(world, system);
 }
 
 /***************************************************************************
@@ -759,13 +798,17 @@ render_world(World* world) {
     Mesh_Data* rendering_data = &world->mesh_renderers.data;
     Transform_Data* transform_data = &world->transforms.data;
 
-    for (u32 i = 1; i < rendering_data->count + 1; i++) {
-        Entity_Handle entity = rendering_data->entity[i];
-        if (!is_alive(world, entity)) continue;
+    std::vector<u8>& data = world->components[Mesh_Renderer_ID];
+    for (u32 i = 0; i < data.size(); i += Mesh_Renderer_SIZE) {
+        Entity* entity = get_entity(world, *((Entity_Handle*) &data[i]));
+        if (!is_alive(world, entity->handle)) continue;
 
-        glm::mat4 model_matrix = get_world_transform(world, entity);
-        const Material material = rendering_data->material[i];
-        const Mesh mesh = rendering_data->mesh[i];
+        auto local_to_world = (Local_To_World*) _get_component(world, entity, Local_To_World_ID, Local_To_World_SIZE);
+        glm::mat4 model_matrix = local_to_world ? local_to_world->m : glm::mat4(1.0f);
+
+        auto mesh_renderer = (Mesh_Renderer*) &data[i + sizeof(Entity_Handle)];
+        const Mesh mesh = mesh_renderer->mesh;
+        const Material material = mesh_renderer->material;
 
         if (material.type != prev_material) {
             apply_material(material,

@@ -28,29 +28,53 @@ namespace std {
     };
 }
 
-/***************************************************************************
- * Component
- ***************************************************************************/
-
 static u32 next_component_id = 0;
 
 #define REGISTER_COMPONENT(type) \
     static const u32 type ## _ID = next_component_id++;    \
-    static const u32 type ## _SIZE = sizeof(type)
+    static const u32 type ## _SIZE = sizeof(type) + sizeof(Entity_Handle)
+
+/***************************************************************************
+ * Common Components
+ ***************************************************************************/
 
 struct Local_To_World {
-    glm::mat4 matrix;
+    glm::mat4 m;
 };
+
+REGISTER_COMPONENT(Local_To_World);
+
+struct Position {
+    glm::vec3 v;
+};
+
+REGISTER_COMPONENT(Position);
+
+struct Rotation {
+    glm::quat q;
+};
+
+REGISTER_COMPONENT(Rotation);
+
+struct Scale {
+    glm::vec3 v;
+};
+
+REGISTER_COMPONENT(Scale);
 
 struct Mesh_Renderer {
     Mesh mesh;
     Material material;
 };
 
+REGISTER_COMPONENT(Mesh_Renderer);
+
 struct View_Projection {
     glm::mat4 view;
     glm::mat4 projection;
 };
+
+REGISTER_COMPONENT(View_Projection);
 
 struct Point_Light {
     glm::vec3 color;
@@ -58,13 +82,10 @@ struct Point_Light {
     f32 distance;
 };
 
-REGISTER_COMPONENT(Local_To_World);
-REGISTER_COMPONENT(Mesh_Renderer);
-REGISTER_COMPONENT(View_Projection);
 REGISTER_COMPONENT(Point_Light);
 
 /***************************************************************************
- * Old Component data FIXME remove all this later
+ * Transform system
  ***************************************************************************/
 
 struct Debug_Names {
@@ -160,6 +181,10 @@ struct Entity {
     std::vector<Component_Handle> components;
 };
 
+/**
+ * On update system function pointer type takes the
+ * delta time, entity handle and list of component data as input.
+ */
 typedef void (*OnUpdateSystem)(f32 dt, Entity_Handle entity, void** components);
 
 /**

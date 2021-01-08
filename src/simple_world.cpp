@@ -112,25 +112,6 @@ player_controller(World* world, Player_Controller* pc, Input* input, Height_Map*
     if (camera) camera->view_position = pc->position;
 }
 
-static void
-print_local_to_world(float dt, Entity_Handle entity, void** components) {
-    auto ltw = (Local_To_World*) components[0];
-    printf("%s\n", glm::to_string(ltw->matrix).c_str());
-    ltw->matrix[0].x += 1.0f;
-}
-
-static void
-test_new_ecs(World* world) {
-    Entity_Handle test_entity = spawn_entity(world);
-    auto local_to_world = add_component(world, test_entity, Local_To_World);
-    local_to_world->matrix = glm::mat4(1.0f);
-
-    System system = {};
-    system.on_update = &print_local_to_world;
-    use_component(&system, Local_To_World);
-    register_system(world, system);
-}
-
 static bool
 initialize_scene(Simple_World_Scene* scene) {
     scene->phong_shader = compile_phong_shader();
@@ -155,7 +136,6 @@ initialize_scene(Simple_World_Scene* scene) {
         Mesh_Builder mb = {};
         push_sphere(&mb, glm::vec3(0.0f), 1.0f);
         scene->mesh_sphere = create_mesh_from_builder(&mb);
-        scene->mesh_sky.is_two_sided = true; // since we are always inside the sky dome
     }
 
     {
@@ -204,35 +184,7 @@ initialize_scene(Simple_World_Scene* scene) {
     std::uniform_real_distribution<f32> dist(0.0f, 100.0f);
     std::uniform_real_distribution<f32> comp(0.0f, 1.0f);
 
-    // Create world
-    World* world = &scene->world;
-    Entity_Handle camera = spawn_entity(world);
-    set_name(world, camera, "Player");
-    scene->camera = camera;
-    scene->world.main_camera = camera;
-    glm::mat4 camera_transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-    set_local_transform(world, camera, camera_transform);
-    set_perspective(world, camera);
-
-    Entity_Handle player = spawn_entity(world);
-    set_name(world, player, "Player");
-    set_local_transform(world, player, camera_transform);
-    scene->player_controller.player = player;
-    scene->player_controller.camera = camera;
-    scene->player_controller.position.x = -50.0f;
-    scene->player_controller.position.y =  50.0f;
-    scene->player_controller.position.z = -50.0f;
-    scene->player_controller.sensitivity = 0.01f;
-
-    Material sky_material = {};
-    sky_material.type = Material_Type_Sky;
-    sky_material.Sky.map = &scene->texture_sky;
-    sky_material.Sky.shader = &scene->sky_shader;
-
-    Entity_Handle sky = spawn_entity(world);
-    set_name(world, sky, "Sky");
-    set_mesh(world, sky, scene->mesh_sky, sky_material);
-
+    // Setup some reusable materials
     Material snow_ground_material = {};
     snow_ground_material.type = Material_Type_Phong;
     snow_ground_material.Phong.diffuse_color = glm::vec3(1.0f);
@@ -241,16 +193,61 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_ground_material.Phong.shininess = 2.0f;
     snow_ground_material.Phong.shader = &scene->phong_shader;
 
-    Entity_Handle terrain = spawn_entity(world);
-    set_name(world, terrain, "Terrain");
-    set_mesh(world, terrain, scene->mesh_terrain, snow_ground_material);
-
     Material snow_material = snow_ground_material;
     snow_material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
     snow_material.Phong.specular_map = &scene->texture_snow_02_specular;
 
 
-    test_new_ecs(world);
+    // Create world
+    World* world = &scene->world;
+    Entity_Handle player_camera = spawn_entity(world);
+    set_name(world, player_camera, "Player Camera");
+    scene->camera = player_camera;
+    scene->world.main_camera = player_camera;
+    glm::mat4 camera_transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+    set_local_transform(world, player_camera, camera_transform);
+    set_perspective(world, player_camera);
+
+    add_component(world, player_camera, Local_To_World);
+    add_component(world, player_camera, Position);
+    add_component(world, player_camera, Rotation);
+
+
+    Entity_Handle player = spawn_entity(world);
+    set_name(world, player, "Player");
+    set_local_transform(world, player, camera_transform);
+    scene->player_controller.player = player;
+    scene->player_controller.camera = player_camera;
+    scene->player_controller.position.x = -50.0f;
+    scene->player_controller.position.y =  50.0f;
+    scene->player_controller.position.z = -50.0f;
+    scene->player_controller.sensitivity = 0.01f;
+
+
+    Entity_Handle test_sphere = spawn_entity(world);
+    add_component(world, test_sphere, Local_To_World);
+    auto pos = add_component(world, test_sphere, Position);
+    pos->v = glm::vec3(50.0f, 1.0f, 50.0f);
+    add_component(world, test_sphere, Rotation);
+    auto renderer = add_component(world, test_sphere, Mesh_Renderer);
+    renderer->mesh = scene->mesh_sphere;
+    renderer->material = snow_material;
+    
+
+    Material sky_material = {};
+    sky_material.type = Material_Type_Sky;
+    sky_material.Sky.map = &scene->texture_sky;
+    sky_material.Sky.shader = &scene->sky_shader;
+
+    Entity_Handle sky = spawn_entity(world);
+    renderer = add_component(world, sky, Mesh_Renderer);
+    renderer->mesh = scene->mesh_sky;
+    renderer->material = sky_material;
+    
+    Entity_Handle terrain = spawn_entity(world);
+    renderer = add_component(world, terrain, Mesh_Renderer);
+    renderer->mesh = scene->mesh_terrain;
+    renderer->material = snow_ground_material;
 
     // Create a snowman
     Entity_Handle snowman_base = spawn_entity(world);
@@ -318,6 +315,8 @@ initialize_scene(Simple_World_Scene* scene) {
         update_transform(&tr);
         set_local_transform(world, snowman_copy, tr.matrix);
     }
+
+    register_transform_system(world);
 
     scene->is_initialized = true;
     return true;
