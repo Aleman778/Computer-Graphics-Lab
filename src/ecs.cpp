@@ -3,7 +3,7 @@
  * Entity management
  ***************************************************************************/
 
-static constexpr usize default_component_capacity = 10; // TODO(alexander): tweak this
+static constexpr usize default_component_capacity = 2; // TODO(alexander): tweak this
 
 static constexpr usize min_removed_indices = 1024;
 
@@ -46,12 +46,12 @@ spawn_entity(World* world) {
     if (world->removed_entity_indices.size() > min_removed_indices) {
         index = world->removed_entity_indices[0];
         world->removed_entity_indices.pop_front();
-        world->handles[index] = world->entities.size();
+        world->handles[index] = (u32) world->entities.size();
     } else {
         index = (u32) world->generations.size();
         assert(index < (1 << entity_index_bits));
         world->generations.push_back(0);
-        world->handles.push_back(world->entities.size());
+        world->handles.push_back((u32) world->entities.size());
     }
 
     Entity entity = {};
@@ -78,8 +78,6 @@ Entity_Handle
 copy_entity(World* world, Entity_Handle entity) {
     assert(is_alive(world, entity));
     Entity_Handle copy = spawn_entity(world); // TODO(alexander): manage new entity manager later!
-    copy_transform(world, entity, copy);
-    copy_mesh(world, entity, copy);
     return copy;
 }
 
@@ -92,7 +90,7 @@ copy_entity(World* world, Entity_Handle entity) {
 #define remove_component(world, handle, type) \
     _remove_component(world, get_entity(world, handle), type ## _ID, type ## _SIZE)
 #define get_component(world, handle, type) \
-    (type*) _get_component(world, get_entity(world, handle), type ## _ID, type ## _SIZE, count)
+    (type*) _get_component(world, get_entity(world, handle), type ## _ID, type ## _SIZE)
 
 void*
 _add_component(World* world, Entity* entity, u32 id, usize size) {
@@ -110,7 +108,7 @@ _add_component(World* world, Entity* entity, u32 id, usize size) {
     *((Entity_Handle*) &memory[curr_size]) = entity->handle;
     curr_size += sizeof(Entity_Handle);
 
-    Component_Handle component = { id, curr_size };
+    Component_Handle component = { (u32) id, curr_size };
     entity->components.push_back(component);
     return &memory[curr_size];
 }
@@ -173,15 +171,6 @@ _get_component(World* world, Entity* entity, u32 id, usize size) {
  * Systems management
  ***************************************************************************/
 
-// Example code
-// {
-//     System transform_system = {};
-//     system.on_update = &update_transform;
-//     use_component(&transform_system, AffineTransform, System::Flag_Optional);
-//     use_component(&transform_system, Local_To_World);
-//     push_system(world, transform_system);
-// }
-
 #define use_component(system, type, ...) \
     _use_component(system, type ## _ID, type ## _SIZE, __VA_ARGS__)
 
@@ -221,7 +210,7 @@ update_systems(World* world, f32 dt) {
             for (int j = 0; j < data.size(); j += size) {
                 Entity_Handle handle = *((Entity_Handle*) &data[j]);
                 void* component = &data[j + sizeof(Entity_Handle)];
-                system->on_update(dt, handle, &component);
+                system->on_update(world, dt, handle, &component);
             }
 
         } else {
@@ -265,7 +254,7 @@ update_systems(World* world, f32 dt) {
                 }
 
                 if (is_valid) {
-                    system->on_update(dt, handle, &component_params[0]);
+                    system->on_update(world, dt, handle, &component_params[0]);
                 }
             }
         }
@@ -276,506 +265,99 @@ update_systems(World* world, f32 dt) {
  * Basic Non-hierarchical Transform System
  ***************************************************************************/
 
-void
-trs_local_to_world_system(f32 dt, Entity_Handle handle, void** components) {
-    auto world = (Local_To_World*) components[0];
+DEF_ON_UPDATE(convert_euler_rotation_system) {
+    auto euler_rot = (Euler_Rotation*) components[0];
+    auto rot = (Rotation*) components[1];
+    
+    rot->q = glm::quat(euler_rot->v);
+}
+
+DEF_ON_UPDATE(trs_local_to_world_system) {
+    auto local_to_world = (Local_To_World*) components[0];
     auto pos = (Position*) components[1];
     auto rot = (Rotation*) components[2];
     auto scl = (Scale*) components[3];
-
-    pos->v.x += 1.0f;
 
     glm::mat4 T = pos ? glm::translate(glm::mat4(1.0f), pos->v) : glm::mat4(1.0f);
     glm::mat4 R = rot ? glm::toMat4(rot->q)                     : glm::mat4(1.0f);
     glm::mat4 S = scl ? glm::scale(glm::mat4(1.0f), scl->v)     : glm::mat4(1.0f);
 
-    world->m = T * R * S;
+    local_to_world->m = T * R * S;
 }
 
 void
-register_transform_system(World* world) {
-    System system = {};
-    system.on_update = &trs_local_to_world_system;
-    use_component(&system, Local_To_World);
-    use_component(&system, Position, System::Flag_Optional);
-    use_component(&system, Rotation, System::Flag_Optional);
-    use_component(&system, Scale,    System::Flag_Optional);
-    register_system(world, system);
+register_transform_systems(World* world) {
+    System euler_conv = {};
+    euler_conv.on_update = &convert_euler_rotation_system;
+    use_component(&euler_conv, Euler_Rotation);
+    use_component(&euler_conv, Rotation);
+    register_system(world, euler_conv);
+    
+    System trs_world = {};
+    trs_world.on_update = &trs_local_to_world_system;
+    use_component(&trs_world, Local_To_World);
+    use_component(&trs_world, Position, System::Flag_Optional);
+    use_component(&trs_world, Rotation, System::Flag_Optional);
+    use_component(&trs_world, Scale,    System::Flag_Optional);
+    register_system(world, trs_world);
 }
 
 /***************************************************************************
- * Debug Name Component
+ * Camera systems
  ***************************************************************************/
 
-std::string
-lookup_name(World* world, Entity_Handle entity) {
-    if (world->names.map.find(entity) != world->names.map.end()) {
-        return world->names.map[entity];
-    }
-    return std::string();
+// NOTE(alexander): same as trs_local_to_world_system but inverted and without scale
+DEF_ON_UPDATE(tr_view_matrix_system) {
+    auto camera = (Camera*) components[0];
+    auto pos = (Position*) components[1];
+    auto rot = (Rotation*) components[2];
+
+    glm::mat4 T = pos ? glm::translate(glm::mat4(1.0f), -pos->v) : glm::mat4(1.0f);
+    glm::mat4 R = rot ? glm::toMat4(rot->q)                      : glm::mat4(1.0f);
+
+    camera->view = T * R;
 }
 
-void
-set_name(World* world, Entity_Handle entity, const char* name) {
-    world->names.map[entity] = std::string(name);
-}
-
-/***************************************************************************
- * Transform Component
- ***************************************************************************/
-
-static void
-ensure_transform_capacity(Transform_Data* data, usize new_capacity) {
-    if (new_capacity > data->capacity) {
-        Transform_Data new_data;
-        new_data.capacity = data->capacity;
-        new_data.count = data->count;
-
-        if (new_data.capacity == 0) {
-            new_data.capacity = 100;
-        } else {
-            new_data.capacity *= 2;
-        }
-        if (new_capacity > new_data.capacity) new_data.capacity = new_capacity;
-
-        u32 size = new_data.capacity*(sizeof(Entity_Handle) + 2*sizeof(glm::mat4) + 4*sizeof(u32));
-        new_data.buffer       = (u8*) malloc(size);
-        new_data.entity       = (Entity_Handle*)     new_data.buffer;
-        new_data.local        = (glm::mat4*) (new_data.entity + new_data.capacity);
-        new_data.world        = (glm::mat4*) (new_data.local + new_data.capacity);
-        new_data.parent       = (u32*)       (new_data.world + new_data.capacity);
-        new_data.first_child  = (u32*)       (new_data.parent + new_data.capacity);
-        new_data.prev_sibling = (u32*)       (new_data.first_child + new_data.capacity);
-        new_data.next_sibling = (u32*)       (new_data.prev_sibling + new_data.capacity);
-
-        if (data->buffer && data->count > 0) {
-            data->count += 1;
-            memcpy(new_data.entity, data->entity, data->count*sizeof(Entity_Handle));
-            memcpy(new_data.local, data->local, data->count*sizeof(glm::mat4));
-            memcpy(new_data.world, data->world, data->count*sizeof(glm::mat4));
-            memcpy(new_data.parent, data->parent, data->count*sizeof(u32));
-            memcpy(new_data.first_child, data->first_child, data->count*sizeof(u32));
-            memcpy(new_data.prev_sibling, data->prev_sibling, data->count*sizeof(u32));
-            memcpy(new_data.next_sibling, data->next_sibling, data->count*sizeof(u32));
-            free(data->buffer);
-        }
-
-        *data = new_data;
-    }
-}
-
-static inline u32
-lookup_transform(Transforms* transforms, Entity_Handle entity) {
-    if (transforms->map.find(entity) != transforms->map.end()) {
-        return transforms->map[entity];
-    }
-    return 0;
-}
-
-static u32
-create_transform(Transforms* transforms, Entity_Handle entity) {
-    u32 index = transforms->data.count + 1;
-    transforms->map[entity] = index;
-    ensure_transform_capacity(&transforms->data, index + 1);
-    transforms->data.entity[index] = entity;
-    transforms->data.local[index] = glm::mat4(1.0f);
-    transforms->data.world[index] = glm::mat4(1.0f);
-    transforms->data.parent[index] = 0;
-    transforms->data.first_child[index] = 0;
-    transforms->data.prev_sibling[index] = 0;
-    transforms->data.next_sibling[index] = 0;
-    transforms->data.count++;
-    return index;
-}
-
-static void
-set_transform(Transform_Data* data, const glm::mat4& parent, u32 index) {
-    data->world[index] = parent * data->local[index];
-
-    u32 child = data->first_child[index];
-    assert(child != index && "parent child cycle detected");
-    while (child) {
-        set_transform(data, data->world[index], child); // TODO(alexander): optimization, make iterative
-        child = data->next_sibling[child];
-    }
-}
-
-void
-set_local_transform(World* world, Entity_Handle entity, const glm::mat4& m) {
-    Transform_Data* data = &world->transforms.data;
-    u32 index = lookup_transform(&world->transforms, entity);
-    if (!index) {
-        index = create_transform(&world->transforms, entity);
-    }
-
-    data->local[index] = m;
-    u32 parent = data->parent[index];
-    glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
-    set_transform(data, parent_m, index);
-}
-
-void
-translate(World* world, Entity_Handle entity, const glm::vec3& v) {
-    Transform_Data* data = &world->transforms.data;
-    u32 index = lookup_transform(&world->transforms, entity);
-    if (!index) {
-        index = create_transform(&world->transforms, entity);
-        data->local[index] = glm::mat4(1.0f);
-    }
-
-    data->local[index] = glm::translate(data->local[index], v);
-    u32 parent = data->parent[index];
-    glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
-    set_transform(data, parent_m, index);
-}
-
-void
-rotate(World* world, Entity_Handle entity, const glm::vec3& v) {
-    Transform_Data* data = &world->transforms.data;
-    u32 index = lookup_transform(&world->transforms, entity);
-    if (!index) {
-        index = create_transform(&world->transforms, entity);
-        data->local[index] = glm::mat4(1.0f);
-    }
-
-    data->local[index] *= glm::toMat4(glm::quat(v));
-    u32 parent = data->parent[index];
-    glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
-    set_transform(data, parent_m, index);
-}
-
-void
-scale(World* world, Entity_Handle entity, const glm::vec3& v) {
-    Transform_Data* data = &world->transforms.data;
-    u32 index = lookup_transform(&world->transforms, entity);
-    if (!index) {
-        index = create_transform(&world->transforms, entity);
-        data->local[index] = glm::mat4(1.0f);
-    }
-
-    data->local[index] = glm::scale(data->local[index], v);
-    u32 parent = data->parent[index];
-    glm::mat4 parent_m = parent ? data->world[parent] : glm::mat4(1.0f);
-    set_transform(data, parent_m, index);
-}
-
-glm::mat4
-get_world_transform(World* world, Entity_Handle entity) {
-    u32 index = lookup_transform(&world->transforms, entity);
-    if (index) {
-        return world->transforms.data.world[index];
-    }
-    return glm::mat4(1.0f);
-}
-
-void
-set_parent(World* world, Entity_Handle entity, Entity_Handle parent_entity) {
-    Transform_Data* data = &world->transforms.data;
-    u32 child = lookup_transform(&world->transforms, entity);
-    u32 parent = lookup_transform(&world->transforms, parent_entity);
-    if (!child) child = create_transform(&world->transforms, entity);
-    if (!parent) parent = create_transform(&world->transforms, parent_entity);
-
-    // Remove previous parent if entity already has a valid parent
-    u32 i = data->parent[child];
-    if (i) {
-        if (data->first_child[i] == child) {
-            data->first_child[i] = data->next_sibling[child];
-        } else {
-            // Follow pointers until this child is found
-            i = data->first_child[i];
-            while (i != child) {
-                i = data->next_sibling[i];
-            }
-
-            // Update subling linked list pointers, if found
-            assert(i && "unexpected orphan child found");
-            u32 prev_sibling = data->prev_sibling[i];
-            u32 next_sibling = data->next_sibling[i];
-            if (prev_sibling) data->next_sibling[prev_sibling] = next_sibling;
-            if (next_sibling) data->prev_sibling[next_sibling] = prev_sibling;
-        }
-    }
-
-    // Create parent child relationship
-    data->parent[child] = parent;
-    i = data->first_child[parent];
-    if (i) {
-        while (data->next_sibling[i] != 0) {
-            i = data->next_sibling[i];
-        }
-        data->next_sibling[i] = child;
-    } else {
-        data->first_child[parent] = child;
-    }
-
-    // Update the childs transform
-    set_transform(data, data->world[parent], child);
-}
-
-void
-copy_transform(World* world, Entity_Handle entity, Entity_Handle copied_entity) {
-    Transform_Data* data = &world->transforms.data;
-    u32 i = lookup_transform(&world->transforms, entity);
-    if (!i) return;
-
-    u32 copy = lookup_transform(&world->transforms, copied_entity);
-    if (!copy) copy = create_transform(&world->transforms, copied_entity);
-
-    data->entity[copy] = data->entity[i];
-    data->local[copy]  = data->local[i];
-    data->world[copy]  = data->world[i];
-    data->parent[copy] = 0;
-
-    if (data->first_child[i]) {
-        u32 child = data->first_child[i];
-        u32 child_copy = 0;
-        if (child) {
-            Entity_Handle entity_copy = copy_entity(world, data->entity[child]);
-            child_copy = lookup_transform(&world->transforms, entity_copy);
-            assert(child_copy && "unexpected missing child node");
-            data->first_child[copy] = child_copy;
-            data->parent[child_copy] = copy;
-        }
-
-        child = data->next_sibling[child];
-        while (child && child_copy) {
-            Entity_Handle entity_copy = copy_entity(world, data->entity[child]);
-            u32 next_child_copy = lookup_transform(&world->transforms, entity_copy);
-            assert(next_child_copy && "unexpected missing child node");
-            data->next_sibling[child_copy] = next_child_copy;
-            data->prev_sibling[next_child_copy] = child_copy;
-
-            child = data->next_sibling[child];
-            child_copy = next_child_copy;
-        }
-    }
-}
-
-void
-destroy_transform(World* world, Entity_Handle entity) {
-    Transform_Data* data = &world->transforms.data;
-    u32 i = lookup_transform(&world->transforms, entity);
-    if (i) {
-        u32 last = data->count - 1;
-        Entity_Handle last_entity = data->entity[last];
-
-        // Update subling linked list pointers
-        u32 prev_sibling = data->prev_sibling[i];
-        u32 next_sibling = data->next_sibling[i];
-        if (prev_sibling) data->next_sibling[prev_sibling] = next_sibling;
-        if (next_sibling) data->prev_sibling[next_sibling] = prev_sibling;
-
-        data->entity[i]       = data->entity[last];
-        data->local[i]        = data->local[last];
-        data->world[i]        = data->world[last];
-        data->parent[i]       = data->parent[last];
-        data->first_child[i]  = data->first_child[last];
-        data->prev_sibling[i] = data->prev_sibling[last];
-        data->next_sibling[i] = data->next_sibling[last];
-
-        // Update subling linked list pointers for the last entity also
-        prev_sibling = data->prev_sibling[i];
-        next_sibling = data->next_sibling[i];
-        if (prev_sibling) data->next_sibling[prev_sibling] = next_sibling;
-        if (next_sibling) data->prev_sibling[next_sibling] = prev_sibling;
-
-        world->transforms.map[last_entity] = i;
-        world->transforms.map.erase(entity);
-        world->transforms.data.count--;
-    }
-}
-
-/***************************************************************************
- * Mesh Renderer Component
- ***************************************************************************/
-
-static void
-ensure_mesh_data_capacity(Mesh_Data* data, usize new_capacity) {
-    if (new_capacity > data->capacity) {
-        Mesh_Data new_data;
-        new_data.capacity = data->capacity;
-        new_data.count = data->count;
-
-        if (new_data.capacity == 0) {
-            new_data.capacity = 100;
-        } else {
-            new_data.capacity *= 2;
-        }
-        if (new_capacity > new_data.capacity) new_data.capacity = new_capacity;
-
-        u32 size = new_data.capacity*(sizeof(Entity_Handle) + sizeof(Mesh) + sizeof(Material));
-        new_data.buffer   = (u8*) malloc(size);
-        new_data.entity   = (Entity_Handle*)    new_data.buffer;
-        new_data.mesh     = (Mesh*)     (new_data.entity + new_data.capacity);
-        new_data.material = (Material*) (new_data.mesh + new_data.capacity);
-
-        if (data->buffer && data->count > 0) {
-            data->count += 1;
-            memcpy(new_data.entity, data->entity, data->count*sizeof(Entity_Handle));
-            memcpy(new_data.mesh, data->mesh, data->count*sizeof(Mesh));
-            memcpy(new_data.material, data->material, data->count*sizeof(Material));
-            free(data->buffer);
-        }
-
-        *data = new_data;
-    }
-}
-
-static inline u32
-lookup_mesh(Mesh_Renderers* mesh_renderers, Entity_Handle entity) {
-    if (mesh_renderers->map.find(entity) != mesh_renderers->map.end()) {
-        return mesh_renderers->map[entity];
-    }
-    return 0;
-}
-
-void
-set_mesh(World* world, Entity_Handle entity, Mesh mesh, Material material) {
-    Mesh_Renderers* mesh_renderers = &world->mesh_renderers;
-    u32 index = lookup_mesh(mesh_renderers, entity);
-    if (!index) {
-        index = mesh_renderers->data.count + 1;
-        mesh_renderers->map[entity] = index;
-        ensure_mesh_data_capacity(&mesh_renderers->data, index + 1);
-    }
-
-    mesh_renderers->data.entity[index] = entity;
-    mesh_renderers->data.mesh[index] = mesh;
-    mesh_renderers->data.material[index] = material;
-    mesh_renderers->data.count++;
-}
-
-void
-copy_mesh(World* world, Entity_Handle entity, Entity_Handle copied_entity) {
-    Mesh_Renderers* mesh_renderers = &world->mesh_renderers;
-    u32 index = lookup_mesh(mesh_renderers, entity);
-    if (index) {
-        set_mesh(world,
-                 copied_entity,
-                 mesh_renderers->data.mesh[index],
-                 mesh_renderers->data.material[index]);
-    }
-}
-
-// TODO(alexander): delete mesh component
-
-/***************************************************************************
- * Camera Component
- ***************************************************************************/
-
-inline Camera_Data*
-lookup_camera(Cameras* cameras, Entity_Handle entity) {
-    if (cameras->map.find(entity) != cameras->map.end()) {
-        return &cameras->map[entity];
-    }
-    return NULL;
-}
-
-void
-set_perspective(World* world,
-                Entity_Handle entity,
-                f32 fov,
-                f32 near,
-                f32 far,
-                f32 aspect_ratio,
-                glm::vec4 viewport) {
-    Camera_Data camera = {};
-    camera.entity = entity;
-    camera.fov = fov;
-    camera.near = near;
-    camera.far = far;
-    camera.aspect_ratio = aspect_ratio;
-    camera.viewport = viewport;
-    camera.is_orthographic = false;
-    camera.projection_matrix = glm::perspective(camera.fov,
-                                                camera.aspect_ratio,
-                                                camera.near,
-                                                camera.far);
-    world->cameras.map.emplace(entity, camera);
-}
-
-void
-set_orthographic(World* world,
-                 Entity_Handle entity,
-                 f32 left,
-                 f32 right,
-                 f32 bottom,
-                 f32 top,
-                 f32 near,
-                 f32 far,
-                 glm::vec4 viewport) {
-    Camera_Data camera = {};
-    camera.entity = entity;
-    camera.left = left;
-    camera.right = right;
-    camera.bottom = bottom;
-    camera.top = top;
-    camera.near = near;
-    camera.far = far;
-    camera.viewport = viewport;
-    camera.is_orthographic = true;
-    if (near == 0 && far == 0) {
-        camera.projection_matrix = glm::ortho(camera.left,
-                                              camera.right,
-                                              camera.bottom,
-                                              camera.top);
-    } else {
-        camera.projection_matrix = glm::ortho(camera.left,
-                                              camera.right,
-                                              camera.bottom,
-                                              camera.top,
-                                              camera.near,
-                                              camera.far);
-    }
-    world->cameras.map.emplace(entity, camera);
-}
-
-void
-adjust_camera_to_fill_window(World* world, Entity_Handle entity, int width, int height) {
-    Camera_Data* camera = lookup_camera(&world->cameras, entity);
-    assert(camera && "entity is missing a camera component");
-
-    f32 aspect_ratio = 0.0f;
-    if (width != 0 && height != 0) {
-        aspect_ratio = ((f32) width)/((f32) height);
-    }
-
-    camera->viewport = glm::vec4(0, 0, (f32) width, (f32) height);
+DEF_ON_UPDATE(set_projection_system) {
+    auto camera = (Camera*) components[0];
 
     if (camera->is_orthographic) {
-        camera->left = 0.0f;
-        camera->right = (f32) width;
-        camera->bottom = (f32) height;
-        camera->top = 0.0f;
-        if (camera->aspect_ratio != aspect_ratio) {
-            camera->aspect_ratio = aspect_ratio;
-            if (camera->near == 0 && camera->far == 0) {
-                camera->projection_matrix = glm::ortho(camera->left,
-                                                       camera->right,
-                                                       camera->bottom,
-                                                       camera->top);
-            } else {
-                camera->projection_matrix = glm::ortho(camera->left,
-                                                       camera->right,
-                                                       camera->bottom,
-                                                       camera->top,
-                                                       camera->near,
-                                                       camera->far);
-            }
+        if (camera->near == 0 && camera->far == 0) {
+            camera->proj = glm::ortho(camera->left,
+                                      camera->right,
+                                      camera->bottom,
+                                      camera->top);
+        } else {
+            camera->proj = glm::ortho(camera->left,
+                                      camera->right,
+                                      camera->bottom,
+                                      camera->top,
+                                      camera->near,
+                                      camera->far);
         }
     } else {
-        if (camera->aspect_ratio != aspect_ratio) {
-            camera->aspect_ratio = aspect_ratio;
-            camera->projection_matrix = glm::perspective(camera->fov,
-                                                         camera->aspect_ratio,
-                                                         camera->near,
-                                                         camera->far);
-        }
+        camera->proj = glm::perspective(camera->fov,
+                                        camera->aspect,
+                                        camera->near,
+                                        camera->far);
     }
 }
 
-// TODO(alexander): delete camera component
+void
+register_camera_systems(World* world) {
+    System view_system = {};
+    view_system.on_update = &tr_view_matrix_system;
+    use_component(&view_system, Camera);
+    use_component(&view_system, Position, System::Flag_Optional);
+    use_component(&view_system, Rotation, System::Flag_Optional);
+    register_system(world, view_system);
+    
+    System projection_system = {};
+    projection_system.on_update = &set_projection_system;
+    use_component(&projection_system, Camera);
+    register_system(world, projection_system);
+}
+
 
 /***************************************************************************
  * Rendering World
@@ -783,21 +365,19 @@ adjust_camera_to_fill_window(World* world, Entity_Handle entity, int width, int 
 
 void
 render_world(World* world) {
-    Camera_Data* camera = lookup_camera(&world->cameras, world->main_camera);
-    if (!is_alive(world, world->main_camera) || !camera) return;
-    world->light_setup.view_position = camera->view_position;
+    if (!is_alive(world, world->main_camera)) return;
+
+    // Camera
+    auto camera = get_component(world, world->main_camera, Camera);
+    auto camera_pos = get_component(world, world->main_camera, Position);
+    assert(camera && "missing required Camera component on main camera");
+    assert(camera_pos && "missing required Position component on main camera");
+    world->light_setup.view_position = camera_pos->v;
+    glm::mat4 view_proj_matrix = camera->proj * camera->view;
 
     begin_frame(world->clear_color, camera->viewport, world->depth_testing);
 
-    // Camera matrices
-    glm::mat4 projection_matrix = camera->projection_matrix;
-    glm::mat4 view_matrix = get_world_transform(world, world->main_camera);
-    glm::mat4 view_proj_matrix = projection_matrix * view_matrix;
-
     Material_Type prev_material = Material_Type_None;
-    Mesh_Data* rendering_data = &world->mesh_renderers.data;
-    Transform_Data* transform_data = &world->transforms.data;
-
     std::vector<u8>& data = world->components[Mesh_Renderer_ID];
     for (u32 i = 0; i < data.size(); i += Mesh_Renderer_SIZE) {
         Entity* entity = get_entity(world, *((Entity_Handle*) &data[i]));
@@ -818,31 +398,8 @@ render_world(World* world) {
                            world->fog_gradient);
         }
 
-        draw_mesh(mesh, material, model_matrix, view_matrix, projection_matrix, view_proj_matrix);
+        draw_mesh(mesh, material, model_matrix, camera->view, camera->proj, view_proj_matrix);
     }
 
     end_frame();
 }
-
-// void
-// render_meshe(World* world, u8** components, u32 count) {
-//     Mesh_Renderer* renderer = (Mesh_Renderer*) components[0];
-//     Local_To_World* local_to_world = (Local_To_World*) components[1];
-
-//     Entity_Handle entity = rendering_data->entity[i];
-//     if (!is_alive(world, entity)) continue;
-
-//     glm::mat4 model_matrix = get_world_transform(world, entity);
-//     const Material material = rendering_data->material[i];
-//     const Mesh mesh = rendering_data->mesh[i];
-
-//     if (material.type != prev_material) {
-//         apply_material(material,
-//                        &world->light_setup,
-//                        world->clear_color,
-//                        world->fog_density,
-//                        world->fog_gradient);
-//     }
-
-//     draw_mesh(mesh, material, model_matrix, view_matrix, projection_matrix, view_proj_matrix);
-// }

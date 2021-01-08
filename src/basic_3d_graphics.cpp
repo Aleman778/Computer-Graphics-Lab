@@ -11,8 +11,6 @@ struct Basic_3D_Graphics_Scene {
     Entity_Handle movable_cube;
     Entity_Handle camera;
 
-    glm::vec3 movable_cube_position;
-    
     float light_attenuation;
     float light_intensity;
 
@@ -34,34 +32,48 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     std::mt19937 rng = std::mt19937(rd());
     std::uniform_real_distribution<f32> dist(-5.0f, 5.0f);
 
-    // Basic material
+    // Setup a basic material
     Material material = {};
     material.type = Material_Type_Basic;
     material.Basic.shader = &scene->basic_shader;
     material.Basic.color = primary_fg_color;
 
+    // Setup the world
+    World* world = &scene->world;
+
     // Create all the graphics nodes
     for (int i = 0; i < 100; i++) {
-        glm::vec3 pos(dist(rng)*3.0f, dist(rng)*2.0f, dist(rng) - 4.5f);
-        glm::mat4 transform = glm::translate(glm::mat4(1.0f), pos);
-
         Entity_Handle entity = spawn_entity(&scene->world);
-        set_local_transform(&scene->world, entity, transform);
-        set_mesh(&scene->world, entity, cuboid_mesh, material);
+        add_component(world, entity, Local_To_World);
+        auto pos = add_component(world, entity, Position);
+        pos->v = glm::vec3(dist(rng)*3.0f, dist(rng)*2.0f, dist(rng) - 4.5f);
+        
+        auto renderer = add_component(world, entity, Mesh_Renderer);
+        renderer->mesh = cuboid_mesh;
+        renderer->material = material;
     }
 
     // Create the movable cube entity
-    scene->movable_cube_position = glm::vec3(0.0f, 0.0f, -1.0f);
-    glm::mat4 transform = glm::translate(glm::mat4(1.0f), scene->movable_cube_position);
+    Entity_Handle movable_cube = spawn_entity(&scene->world);
+    scene->movable_cube = movable_cube;
     material.Basic.color = green_color;
-    scene->movable_cube = spawn_entity(&scene->world);
-    set_local_transform(&scene->world, scene->movable_cube, transform);
-    set_mesh(&scene->world, scene->movable_cube, cuboid_mesh, material);
+    add_component(world, movable_cube, Local_To_World);
+    auto pos = add_component(world, movable_cube, Position);
+    pos->v = glm::vec3(0.0f, 0.0f, -1.0f);
+        
+    auto renderer = add_component(world, movable_cube, Mesh_Renderer);
+    renderer->mesh = cuboid_mesh;
+    renderer->material = material;
 
     // Create camera entity
-    scene->camera = spawn_entity(&scene->world);
-    scene->world.main_camera = scene->camera;
-    set_perspective(&scene->world, scene->camera);
+    Entity_Handle camera = spawn_entity(world);
+    scene->camera = camera;
+    world->main_camera = camera;
+    auto camera_component = add_component(world, camera, Camera);
+    camera_component->fov = half_pi;
+    camera_component->near = 0.01f;
+    camera_component->far = 100000.0f;
+    add_component(world, camera, Position);
 
     // Scene properties
     scene->light_intensity = 0.4f;
@@ -86,14 +98,27 @@ update_and_render_scene(Basic_3D_Graphics_Scene* scene, Window* window) {
         speed = 0.08f;
     }
 
-    if (window->input.a_key.ended_down) scene->movable_cube_position.x -= speed;
-    if (window->input.d_key.ended_down) scene->movable_cube_position.x += speed;
-    if (window->input.w_key.ended_down) scene->movable_cube_position.y += speed;
-    if (window->input.s_key.ended_down) scene->movable_cube_position.y -= speed;
-    if (window->input.c_key.ended_down) scene->movable_cube_position.z += speed;
-    if (window->input.e_key.ended_down) scene->movable_cube_position.z -= speed;
+    // TODO(alexander): this could be moved into a system and component
+    auto cube_pos = get_component(&scene->world, scene->movable_cube, Position);
+    if (cube_pos) {
+        if (window->input.a_key.ended_down) cube_pos->v.x -= speed;
+        if (window->input.d_key.ended_down) cube_pos->v.x += speed;
+        if (window->input.w_key.ended_down) cube_pos->v.y += speed;
+        if (window->input.s_key.ended_down) cube_pos->v.y -= speed;
+        if (window->input.c_key.ended_down) cube_pos->v.z += speed;
+        if (window->input.e_key.ended_down) cube_pos->v.z -= speed;
+    }
+    
+    // Make the players camera fit the entire window
+    auto camera = get_component(&scene->world, scene->camera, Camera);
+    if (camera) {
+        if (window->width != 0 && window->height != 0) {
+            camera->aspect = ((f32) window->width)/((f32) window->height);
+        }
+        camera->viewport = glm::vec4(0, 0, (f32) window->width, (f32) window->height);
+    }
 
-    adjust_camera_to_fill_window(&scene->world, scene->camera, window->width, window->height);
+    update_systems(&scene->world, 0.0f); // TODO(alexander): delta time!!!
 
     render_world(&scene->world);
 
