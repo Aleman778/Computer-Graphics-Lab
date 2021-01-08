@@ -144,8 +144,6 @@ struct Cameras {
     std::unordered_map<Entity_Handle, Camera_Data> map;
 };
 
-typedef void (*OnUpdateSystem)(f32 dt, void** components);
-
 /**
  * Handle to a particular instance of a component.
  */
@@ -162,8 +160,28 @@ struct Entity {
     std::vector<Component_Handle> components;
 };
 
+typedef void (*OnUpdateSystem)(f32 dt, Entity_Handle entity, void** components);
+
 /**
- * World is where all entities live.
+ * System is just a function that takes some number of components as input.
+ * This is a helper structure that defines the function pointer to call and
+ * its components to take in as argument (i.e. void** components argument).
+ */
+struct System {
+    enum {
+        Flag_Optional = 1,
+    };
+
+    void* data;
+    OnUpdateSystem on_update;
+    std::vector<u32> component_ids;
+    std::vector<u32> component_sizes;
+    std::vector<u32> component_flags;
+};
+
+/**
+ * World is where everyting in the entity component system is defined.
+ * Entities are managed here, component data is stored here and systems are defined here.
  */
 struct World {
     std::vector<u8> generations;
@@ -172,7 +190,8 @@ struct World {
     std::vector<Entity> entities; // all the live entities
     std::vector<u32> handles; // lookup entity by handle, NOTE: only valid if the entity itself is alive!!!
     std::unordered_map<u32, std::vector<u8>> components; // where component data is stored
-    
+    std::vector<System> systems;
+
     Debug_Names names;
     Transforms transforms;
     Mesh_Renderers mesh_renderers;
@@ -187,10 +206,14 @@ struct World {
     bool depth_testing;
 };
 
+inline bool is_alive(World* world, Entity_Handle entity);
 Entity_Handle spawn_entity(World* world);
 void despawn_entity(World* world, Entity_Handle entity);
 Entity_Handle copy_entity(World* world, Entity_Handle entity);
-inline bool is_alive(World* world, Entity_Handle entity);
+
+void*    _add_component(World* world, Entity_Handle handle, u32 id, usize size);
+bool  _remove_component(World* world, Entity_Handle handle, u32 id, usize size);
+void*    _get_component(World* world, Entity_Handle handle, u32 id, usize size);
 
 std::string lookup_name(World* world, Entity_Handle entity);
 void set_name(World* world, Entity_Handle entity, const char* name);

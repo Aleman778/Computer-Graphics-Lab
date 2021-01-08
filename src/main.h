@@ -36,6 +36,8 @@
 #include <stb_image.h>
 
 #define array_count(array) (sizeof(array)/sizeof((array)[0]))
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
 
 typedef unsigned int uint;
 typedef  int8_t   i8;

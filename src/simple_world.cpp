@@ -112,6 +112,25 @@ player_controller(World* world, Player_Controller* pc, Input* input, Height_Map*
     if (camera) camera->view_position = pc->position;
 }
 
+static void
+print_local_to_world(float dt, Entity_Handle entity, void** components) {
+    auto ltw = (Local_To_World*) components[0];
+    printf("%s\n", glm::to_string(ltw->matrix).c_str());
+    ltw->matrix[0].x += 1.0f;
+}
+
+static void
+test_new_ecs(World* world) {
+    Entity_Handle test_entity = spawn_entity(world);
+    auto local_to_world = add_component(world, test_entity, Local_To_World);
+    local_to_world->matrix = glm::mat4(1.0f);
+
+    System system = {};
+    system.on_update = &print_local_to_world;
+    use_component(&system, Local_To_World);
+    register_system(world, system);
+}
+
 static bool
 initialize_scene(Simple_World_Scene* scene) {
     scene->phong_shader = compile_phong_shader();
@@ -230,10 +249,8 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
     snow_material.Phong.specular_map = &scene->texture_snow_02_specular;
 
-    Entity_Handle test_entity = spawn_entity(world);
-    auto local_to_world = add_component(world, test_entity, Local_To_World);
-    local_to_world->matrix = glm::mat4(1.0f);
-    remove_component(world, test_entity, Local_To_World);
+
+    test_new_ecs(world);
 
     // Create a snowman
     Entity_Handle snowman_base = spawn_entity(world);
@@ -332,25 +349,29 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
+    update_systems(&scene->world, 0.0f); // TODO(alexander): delta time!!!
+    
     render_world(&scene->world);
 
-    ImGui::Begin("Hierarchy", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
-    if (ImGui::TreeNode("World")) {
-        for (int i = 0; i < scene->world.generations.size(); i++) {
-            Entity_Handle entity = make_entity_handle(i, scene->world.generations[i]);
-            if (ImGui::TreeNodeEx(lookup_name(&scene->world, entity).c_str(), ImGuiTreeNodeFlags_Leaf)) {
-                ImGui::TreePop();
-            }
-        }
-        ImGui::TreePop();
-    }
-    ImGui::End();
+    // ImGui::Begin("Hierarchy", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
+    // if (ImGui::TreeNode("World")) {
+    //     for (int i = 0; i < scene->world.generations.size(); i++) {
+    //         Entity_Handle entity = make_entity_handle(i, scene->world.generations[i]);
+    //         if (ImGui::TreeNodeEx(lookup_name(&scene->world, entity).c_str(), ImGuiTreeNodeFlags_Leaf)) {
+    //             ImGui::TreePop();
+    //         }
+    //     }
+    //     ImGui::TreePop();
+    // }
+    // ImGui::End();
     
 
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::Text("Light Setup:");
+    ImGui::DragFloat3("Light position", &scene->world.light_setup.position.x);
     ImGui::ColorEdit3("Light color", &scene->world.light_setup.color.x);
+    ImGui::SliderFloat("Ambient intensity", &scene->world.light_setup.ambient_intensity, 0.0f, 1.0f);
 
     ImGui::Text("Sky:");
     ImGui::ColorEdit3("Sky color", &scene->world.clear_color.x);

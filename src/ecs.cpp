@@ -4,7 +4,7 @@
  ***************************************************************************/
 
 static constexpr usize default_component_capacity = 10; // TODO(alexander): tweak this
-    
+
 static constexpr usize min_removed_indices = 1024;
 
 static constexpr usize entity_index_bits = 24;
@@ -53,7 +53,7 @@ spawn_entity(World* world) {
         world->generations.push_back(0);
         world->handles.push_back(world->entities.size());
     }
-    
+
     Entity_Handle entity = make_entity_handle(index, world->generations[index]);
     world->entities.push_back({});
     return entity;
@@ -86,11 +86,15 @@ copy_entity(World* world, Entity_Handle entity) {
  ***************************************************************************/
 
 #define add_component(world, handle, type) \
-    (type*) _add_component(world, handle, type ## _ID, type ## _SIZE)
+    (type*) _add_component(world, get_entity(world, handle), type ## _ID, type ## _SIZE)
+#define remove_component(world, handle, type) \
+    _remove_component(world, get_entity(world, handle), type ## _ID, type ## _SIZE)
+#define get_component(world, handle, type) \
+    (type*) _get_component(world, get_entity(world, handle), type ## _ID, type ## _SIZE, count)
 
-void*
-_add_component(World* world, Entity_Handle handle, u32 id, usize size) {
-    assert(is_alive(world, handle) && "cannot add component to despawned entity");
+static void*
+_add_component(World* world, Entity* entity, u32 id, usize size) {
+    assert(is_alive(world, entity->handle) && "cannot add component to despawned entity");
 
     if (world->components.find(id) == world->components.end()) {
         world->components[id].reserve(size*default_component_capacity);
@@ -101,7 +105,6 @@ _add_component(World* world, Entity_Handle handle, u32 id, usize size) {
     memory.resize(curr_size + size + sizeof(Entity_Handle)); // TODO(alexander): use custom allocator
 
     // NOTE(alexander): each component data needs to keep track of its owner handle
-    Entity* entity = get_entity(world, handle);
     *((Entity_Handle*) &memory[curr_size]) = entity->handle;
     curr_size += sizeof(Entity_Handle);
 
@@ -110,23 +113,20 @@ _add_component(World* world, Entity_Handle handle, u32 id, usize size) {
     return &memory[curr_size];
 }
 
-#define remove_component(world, handle, type) \
-    _remove_component(world, handle, type ## _ID, type ## _SIZE)
+static bool
+_remove_component(World* world, Entity* entity, u32 id, usize size) {
+    assert(is_alive(world, entity->handle) && "cannot remove component from despawned entity");
 
-bool
-_remove_component(World* world, Entity_Handle handle, u32 id, usize size) {
-    assert(is_alive(world, handle) && "cannot remove component from despawned entity");
-
-    Entity* entity = get_entity(world, handle);
     for (int i = 0; i < entity->components.size(); i++) {
         Component_Handle& component = entity->components[i];
-        
+
         if (component.id == id) {
             std::vector<u8>& memory = world->components[id]; // TODO(alexander): use custom allocator
+            usize index = component.offset - sizeof(Entity_Handle);
             usize last_index = memory.size() - size - sizeof(Entity_Handle);
             Entity_Handle* last = (Entity_Handle*) &memory[last_index];
 
-            if (component.offset != last_index) {
+            if (index != last_index) {
                 Entity* last_entity = get_entity(world, *last);
                 for (auto last_component : last_entity->components) {
                     if (last_component.id == component.id && last_component.offset == last_index) {
@@ -134,18 +134,134 @@ _remove_component(World* world, Entity_Handle handle, u32 id, usize size) {
                         break;
                     }
                 }
-                
+
                 memcpy(&memory[component.id], last, size + sizeof(Entity_Handle));
             }
-            
+
             memory.resize(last_index);
-            
+
             entity->components[i] = entity->components[entity->components.size() - 1];
             entity->components.pop_back();
         }
     }
-    
+
     return false;
+}
+
+static void*
+_get_component(World* world, Entity* entity, u32 id, usize size) {
+    assert(is_alive(world, entity->handle) && "cannot get component from despawned entity");
+    
+    for (int i = 0; i < entity->components.size(); i++) {
+        Component_Handle& component = entity->components[i];
+
+        if (component.id == id) {
+            std::vector<u8>& memory = world->components[id];
+            return &memory[component.offset];
+        }
+    }
+
+    return NULL;
+}
+
+// TODO(alexander): maybe add get_all_components or more than one component
+// TODO(alexander): should it be possible to have two of the same component on one entity?
+
+/***************************************************************************
+ * Systems management
+ ***************************************************************************/
+
+// Example code
+// {
+//     System transform_system = {};
+//     system.on_update = &update_transform;
+//     use_component(&transform_system, AffineTransform, System::Flag_Optional);
+//     use_component(&transform_system, Local_To_World);
+//     push_system(world, transform_system);
+// }
+
+#define use_component(system, type, ...) \
+    _use_component(system, type ## _ID, type ## _SIZE, __VA_ARGS__)
+
+void
+_use_component(System* system, u32 id, u32 size, u32 flags=0) {
+    system->component_ids.push_back(id);
+    system->component_sizes.push_back(size);
+    system->component_flags.push_back(flags);
+}
+
+void
+register_system(World* world, System system) {
+    assert(system.component_ids.size() > 0 && "expected system to use at least one component");
+    world->systems.push_back(system);
+}
+
+void
+update_systems(World* world, f32 dt) {
+    std::vector<void*> component_params;
+    std::vector<std::vector<u8>*> component_data;
+
+    for (u32 i = 0; i < world->systems.size(); i++) {
+        System* system = &world->systems[i];
+
+        if (system->component_ids.size() == 1) {
+            u32 id = system->component_ids[0];
+            u32 size = system->component_sizes[0] + sizeof(Entity_Handle);
+            std::vector<u8>& data = world->components[id];
+            for (int j = 0; j < data.size(); j += size) {
+                Entity_Handle handle = *((Entity_Handle*) &data[j]);
+                void* component = &data[j + sizeof(Entity_Handle)];
+                system->on_update(dt, handle, &component);
+            }
+
+        } else {
+            component_params.resize(max(component_params.size(), system->component_ids.size()));
+            component_data.resize(max(component_data.size(), system->component_ids.size()));
+
+            u32 min_size = (u32) -1;
+            u32 min_index = (u32) -1;
+            for (int j = 0; j < system->component_ids.size(); j++) {
+                component_data[j] = &world->components[system->component_ids[j]];
+                if ((system->component_flags[j] & System::Flag_Optional) != 0) {
+                    continue;
+                }
+
+                u32 id = system->component_ids[0];
+                u32 size = system->component_sizes[0] + sizeof(Entity_Handle);
+                if (size <= min_size) {
+                    min_size = size;
+                    min_index = i;
+                }
+            }
+
+            min_size += sizeof(Entity_Handle);
+            assert(min_index == (u32) -1);
+
+            std::vector<u8>& data = *component_data[min_index];
+            for (int j = 0; j < data.size(); j += min_size) {
+                Entity_Handle handle = *((Entity_Handle*) &data[j]);
+                Entity* entity = get_entity(world, handle);
+
+                bool is_valid = true;
+                for (int k = 0; k < system->component_ids.size(); k++) {
+                    if (k == min_index) continue;
+                    component_params[k] = _get_component(world,
+                                                         entity,
+                                                         system->component_ids[k],
+                                                         system->component_sizes[k]);
+                    if (component_params[k] == NULL &&
+                        (system->component_flags[k] & System::Flag_Optional) == 0) {
+                        is_valid = false;
+                        break;
+                    }
+                }
+
+                if (is_valid) {
+                    system->on_update(dt, handle, &component_params[0]);
+                }
+            }
+        }
+    }
 }
 
 /***************************************************************************
