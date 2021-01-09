@@ -153,8 +153,13 @@ static void
 window_cursor_pos_callback(GLFWwindow* glfw_window, double xpos, double ypos) {
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
-        window->input.mouse_delta_x += (f32) xpos - window->input.mouse_x;
-        window->input.mouse_delta_y += (f32) ypos - window->input.mouse_y;
+        if (window->input.mouse_locked) {
+            window->input.mouse_delta_x += (f32) xpos - window->width/2.0f;
+            window->input.mouse_delta_y += (f32) ypos - window->height/2.0f;
+        } else {
+            window->input.mouse_delta_x += (f32) xpos - window->input.mouse_x;
+            window->input.mouse_delta_y += (f32) ypos - window->input.mouse_y;
+        }
         window->input.mouse_x = (f32) xpos;
         window->input.mouse_y = (f32) ypos;
     }

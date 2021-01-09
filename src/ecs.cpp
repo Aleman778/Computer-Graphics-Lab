@@ -164,9 +164,6 @@ _get_component(World* world, Entity* entity, u32 id, usize size) {
     return NULL;
 }
 
-// TODO(alexander): maybe add get_all_components or more than one component
-// TODO(alexander): should it be possible to have two of the same component on one entity?
-
 /***************************************************************************
  * Systems management
  ***************************************************************************/
@@ -175,14 +172,14 @@ _get_component(World* world, Entity* entity, u32 id, usize size) {
     _use_component(system, type ## _ID, type ## _SIZE, __VA_ARGS__)
 
 void
-_use_component(System* system, u32 id, u32 size, u32 flags=0) {
-    system->component_ids.push_back(id);
-    system->component_sizes.push_back(size);
-    system->component_flags.push_back(flags);
+_use_component(System& system, u32 id, u32 size, u32 flags) {
+    system.component_ids.push_back(id);
+    system.component_sizes.push_back(size);
+    system.component_flags.push_back(flags);
 }
 
 void
-register_system(World* world, System system) {
+push_system(std::vector<System>& systems, System system) {
     assert(system.component_ids.size() > 0 && "expected system to use at least one component");
     bool is_valid = false;
     for (int i = 0; i < system.component_flags.size(); i++) {
@@ -192,44 +189,45 @@ register_system(World* world, System system) {
         }
     }
     assert(is_valid && "invalid system, all components cannot be optional");
-    world->systems.push_back(system);
+    systems.push_back(system);
 }
 
 void
-update_systems(World* world, f32 dt) {
+update_systems(World* world, const std::vector<System>& systems, f32 dt) {
     std::vector<void*> component_params;
     std::vector<std::vector<u8>*> component_data;
 
-    for (u32 i = 0; i < world->systems.size(); i++) {
-        System* system = &world->systems[i];
+    for (u32 i = 0; i < systems.size(); i++) {
+        const System& system = systems[i];
+        assert(system.on_update && "system is missing on_update function");
 
-        if (system->component_ids.size() == 1) {
-            u32 id = system->component_ids[0];
-            u32 size = system->component_sizes[0];
+        if (system.component_ids.size() == 1) {
+            u32 id = system.component_ids[0];
+            u32 size = system.component_sizes[0];
             std::vector<u8>& data = world->components[id];
             for (int j = 0; j < data.size(); j += size) {
                 Entity_Handle handle = *((Entity_Handle*) &data[j]);
                 void* component = &data[j + sizeof(Entity_Handle)];
-                system->on_update(world, dt, handle, &component);
+                system.on_update(world, dt, handle, &component, system.data);
             }
 
         } else {
-            component_params.resize(max(component_params.size(), system->component_ids.size()));
-            component_data.resize(max(component_data.size(), system->component_ids.size()));
+            component_params.resize(max(component_params.size(), system.component_ids.size()));
+            component_data.resize(max(component_data.size(), system.component_ids.size()));
 
             u32 min_size = (u32) -1;
             u32 min_index = (u32) -1;
-            for (int j = 0; j < system->component_ids.size(); j++) {
-                component_data[j] = &world->components[system->component_ids[j]];
-                if ((system->component_flags[j] & System::Flag_Optional) != 0) {
+            for (int j = 0; j < system.component_ids.size(); j++) {
+                component_data[j] = &world->components[system.component_ids[j]];
+                if ((system.component_flags[j] & System::Flag_Optional) != 0) {
                     continue;
                 }
 
-                u32 id = system->component_ids[0];
-                u32 size = system->component_sizes[0];
+                u32 id = system.component_ids[j];
+                u32 size = system.component_sizes[j];
                 if (size <= min_size) {
                     min_size = size;
-                    min_index = i;
+                    min_index = j;
                 }
             }
             assert(min_index < component_params.size());
@@ -241,20 +239,20 @@ update_systems(World* world, f32 dt) {
                 component_params[min_index] = &data[j + sizeof(Entity_Handle)];
                 
                 bool is_valid = true;
-                for (int k = 0; k < system->component_ids.size(); k++) {
+                for (int k = 0; k < system.component_ids.size(); k++) {
                     if (k == min_index) continue;
                     component_params[k] = _get_component(world,
                                                          entity,
-                                                         system->component_ids[k],
-                                                         system->component_sizes[k]);
-                    if (component_params[k] == NULL && (system->component_flags[k] & System::Flag_Optional) == 0) {
+                                                         system.component_ids[k],
+                                                         system.component_sizes[k]);
+                    if (component_params[k] == NULL && (system.component_flags[k] & System::Flag_Optional) == 0) {
                         is_valid = false;
                         break;
                     }
                 }
 
                 if (is_valid) {
-                    system->on_update(world, dt, handle, &component_params[0]);
+                    system.on_update(world, dt, handle, &component_params[0], system.data);
                 }
             }
         }
@@ -265,14 +263,18 @@ update_systems(World* world, f32 dt) {
  * Basic Non-hierarchical Transform System
  ***************************************************************************/
 
-DEF_ON_UPDATE(convert_euler_rotation_system) {
+DEF_SYSTEM(convert_euler_rotation_system) {
     auto euler_rot = (Euler_Rotation*) components[0];
     auto rot = (Rotation*) components[1];
-    
-    rot->q = glm::quat(euler_rot->v);
+
+    // NOTE(alexander): y - points upwards, but glm uses z instead
+    glm::quat rot_x(glm::vec3(0.0f, euler_rot->v.x, 0.0f));
+    glm::quat rot_y(glm::vec3(euler_rot->v.y, 0.0f, 0.0f));
+    glm::quat rot_z(glm::vec3(0.0f, 0.0f, euler_rot->v.z));
+    rot->q = rot_z * rot_y * rot_x;
 }
 
-DEF_ON_UPDATE(trs_local_to_world_system) {
+DEF_SYSTEM(trs_local_to_world_system) {
     auto local_to_world = (Local_To_World*) components[0];
     auto pos = (Position*) components[1];
     auto rot = (Rotation*) components[2];
@@ -286,20 +288,20 @@ DEF_ON_UPDATE(trs_local_to_world_system) {
 }
 
 void
-register_transform_systems(World* world) {
+push_transform_systems(std::vector<System>& systems) {
     System euler_conv = {};
     euler_conv.on_update = &convert_euler_rotation_system;
-    use_component(&euler_conv, Euler_Rotation);
-    use_component(&euler_conv, Rotation);
-    register_system(world, euler_conv);
+    use_component(euler_conv, Euler_Rotation);
+    use_component(euler_conv, Rotation);
+    push_system(systems, euler_conv);
     
     System trs_world = {};
     trs_world.on_update = &trs_local_to_world_system;
-    use_component(&trs_world, Local_To_World);
-    use_component(&trs_world, Position, System::Flag_Optional);
-    use_component(&trs_world, Rotation, System::Flag_Optional);
-    use_component(&trs_world, Scale,    System::Flag_Optional);
-    register_system(world, trs_world);
+    use_component(trs_world, Local_To_World);
+    use_component(trs_world, Position, System::Flag_Optional);
+    use_component(trs_world, Rotation, System::Flag_Optional);
+    use_component(trs_world, Scale,    System::Flag_Optional);
+    push_system(systems, trs_world);
 }
 
 /***************************************************************************
@@ -307,7 +309,7 @@ register_transform_systems(World* world) {
  ***************************************************************************/
 
 // NOTE(alexander): same as trs_local_to_world_system but inverted and without scale
-DEF_ON_UPDATE(tr_view_matrix_system) {
+DEF_SYSTEM(rt_view_matrix_system) {
     auto camera = (Camera*) components[0];
     auto pos = (Position*) components[1];
     auto rot = (Rotation*) components[2];
@@ -315,10 +317,10 @@ DEF_ON_UPDATE(tr_view_matrix_system) {
     glm::mat4 T = pos ? glm::translate(glm::mat4(1.0f), -pos->v) : glm::mat4(1.0f);
     glm::mat4 R = rot ? glm::toMat4(rot->q)                      : glm::mat4(1.0f);
 
-    camera->view = T * R;
+    camera->view = R * T;
 }
 
-DEF_ON_UPDATE(set_projection_system) {
+DEF_SYSTEM(set_projection_system) {
     auto camera = (Camera*) components[0];
 
     if (camera->is_orthographic) {
@@ -343,63 +345,66 @@ DEF_ON_UPDATE(set_projection_system) {
     }
 }
 
+DEF_SYSTEM(prepare_camera_system) {
+    auto camera = (Camera*) components[0];
+    auto camera_pos = (Position*) components[1];
+    if (camera_pos) world->light.view_pos = -camera_pos->v;
+    camera->view_proj = camera->proj * camera->view;
+}
+
 void
-register_camera_systems(World* world) {
+push_camera_systems(std::vector<System>& systems) {
     System view_system = {};
-    view_system.on_update = &tr_view_matrix_system;
-    use_component(&view_system, Camera);
-    use_component(&view_system, Position, System::Flag_Optional);
-    use_component(&view_system, Rotation, System::Flag_Optional);
-    register_system(world, view_system);
+    view_system.on_update = &rt_view_matrix_system;
+    use_component(view_system, Camera);
+    use_component(view_system, Position, System::Flag_Optional);
+    use_component(view_system, Rotation, System::Flag_Optional);
+    push_system(systems, view_system);
     
     System projection_system = {};
     projection_system.on_update = &set_projection_system;
-    use_component(&projection_system, Camera);
-    register_system(world, projection_system);
+    use_component(projection_system, Camera);
+    push_system(systems, projection_system);
+
+    System prepare_system = {};
+    prepare_system.on_update = &prepare_camera_system;
+    use_component(prepare_system, Camera);
+    use_component(prepare_system, Position, System::Flag_Optional);
+    push_system(systems, prepare_system);
 }
 
 
 /***************************************************************************
- * Rendering World
+ * Rendering Systems
  ***************************************************************************/
 
+DEF_SYSTEM(mesh_renderer_system) {
+    assert(data && "missing targeted camera for rendering to");
+    
+    auto camera = get_component(world, *((Entity_Handle*) data), Camera);
+    auto mesh_renderer = (Mesh_Renderer*) components[0];
+    auto local_to_world = (Local_To_World*) components[1];
+
+    assert(camera && "missing camera component on target camera entity");
+    
+    glm::mat4 model_matrix = local_to_world ? local_to_world->m : glm::mat4(1.0f);
+    const Mesh mesh = mesh_renderer->mesh;
+    const Material material = mesh_renderer->material;
+
+    apply_material(material,
+                   &world->light,
+                   world->clear_color,
+                   world->fog_density,
+                   world->fog_gradient);
+    draw_mesh(mesh, material, model_matrix, camera->view, camera->proj, camera->view_proj);
+}
+
 void
-render_world(World* world) {
-    if (!is_alive(world, world->main_camera)) return;
-
-    // Camera
-    auto camera = get_component(world, world->main_camera, Camera);
-    auto camera_pos = get_component(world, world->main_camera, Position);
-    assert(camera && "missing required Camera component on main camera");
-    assert(camera_pos && "missing required Position component on main camera");
-    world->light_setup.view_position = camera_pos->v;
-    glm::mat4 view_proj_matrix = camera->proj * camera->view;
-
-    begin_frame(world->clear_color, camera->viewport, world->depth_testing);
-
-    Material_Type prev_material = Material_Type_None;
-    std::vector<u8>& data = world->components[Mesh_Renderer_ID];
-    for (u32 i = 0; i < data.size(); i += Mesh_Renderer_SIZE) {
-        Entity* entity = get_entity(world, *((Entity_Handle*) &data[i]));
-        if (!is_alive(world, entity->handle)) continue;
-
-        auto local_to_world = (Local_To_World*) _get_component(world, entity, Local_To_World_ID, Local_To_World_SIZE);
-        glm::mat4 model_matrix = local_to_world ? local_to_world->m : glm::mat4(1.0f);
-
-        auto mesh_renderer = (Mesh_Renderer*) &data[i + sizeof(Entity_Handle)];
-        const Mesh mesh = mesh_renderer->mesh;
-        const Material material = mesh_renderer->material;
-
-        if (material.type != prev_material) {
-            apply_material(material,
-                           &world->light_setup,
-                           world->clear_color,
-                           world->fog_density,
-                           world->fog_gradient);
-        }
-
-        draw_mesh(mesh, material, model_matrix, camera->view, camera->proj, view_proj_matrix);
-    }
-
-    end_frame();
+push_mesh_renderer_system(std::vector<System>& systems, Entity_Handle* camera) {
+    System system = {};
+    system.data = camera;
+    system.on_update = &mesh_renderer_system;
+    use_component(system, Mesh_Renderer);
+    use_component(system, Local_To_World, System::Flag_Optional);
+    push_system(systems, system);
 }

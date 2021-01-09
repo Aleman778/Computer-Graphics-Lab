@@ -37,39 +37,40 @@ struct Basic_Shader {
 
 struct Phong_Shader {
     GLuint program;
-    GLint u_diffuse_color;
-    GLint u_diffuse_map;
-    GLint u_specular_map;
+    GLint u_color;
+    GLint u_diffuse;
+    GLint u_specular;
     GLint u_shininess;
 
     GLint u_model_transform;
     GLint u_mvp_transform;
 
-    GLint u_sky_color; // usually same as clear color
+    GLint u_fog_color; // usually same as clear color
     GLint u_fog_density; // increase density -> more fog (shorter view distance)
     GLint u_fog_gradient; // increase gradient -> sharper transition
 
     struct {
-        GLint position;
-        GLint view_position;
-        GLint color;
-        GLint ambient_intensity;
-    } u_light_setup;
+        GLint u_pos;
+        GLint u_view_pos;
+        GLint u_ambient;
+        GLint u_diffuse;
+        GLint u_specular;
+    } light_setup;
 };
 
 struct Sky_Shader {
     GLuint program;
     GLint u_map;
     GLint u_fog_color;
-
     GLint u_vp_transform;
 };
 
 struct Light_Setup {
-    glm::vec3 color;
-    glm::vec3 position;
-    glm::vec3 view_position;
-    float ambient_intensity;
+    glm::vec3 pos;
+    glm::vec3 view_pos;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
 };
 
 enum Material_Type {
@@ -86,9 +87,9 @@ struct Basic_Material {
 
 struct Phong_Material {
     Phong_Shader* shader;
-    glm::vec3 diffuse_color;
-    Texture* diffuse_map;
-    Texture* specular_map;
+    glm::vec3 color;
+    Texture* diffuse;
+    Texture* specular;
     f32 shininess;
 };
 

@@ -8,6 +8,8 @@ struct Basic_3D_Graphics_Scene {
     Basic_Shader basic_shader;
 
     World world;
+    std::vector<System> main_systems;
+    std::vector<System> rendering_pipeline;
     Entity_Handle movable_cube;
     Entity_Handle camera;
 
@@ -68,14 +70,28 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     // Create camera entity
     Entity_Handle camera = spawn_entity(world);
     scene->camera = camera;
-    world->main_camera = camera;
     auto camera_component = add_component(world, camera, Camera);
     camera_component->fov = half_pi;
     camera_component->near = 0.01f;
     camera_component->far = 100000.0f;
+    camera_component->is_orthographic = false;
     add_component(world, camera, Position);
 
-    // Scene properties
+    // Setup main systems
+    push_transform_systems(scene->main_systems);
+    push_camera_systems(scene->main_systems);
+
+    // Setup rendering pipeline
+    push_mesh_renderer_system(scene->rendering_pipeline, &scene->camera);
+
+    // Scene and world properties
+    scene->world.clear_color = glm::vec4(0.01f, 0.01f, 0.01f, 1.0f);
+    scene->world.fog_density = 0.05f;
+    scene->world.fog_gradient = 2.0f;
+    scene->world.light.pos = glm::vec3(50.0f, 1.0f, 50.0f);
+    scene->world.light.ambient = glm::vec3(0.1f, 0.1f, 0.1f);
+    scene->world.light.diffuse = glm::vec3(0.6f, 0.6f, 0.6f);
+    scene->world.light.specular = glm::vec3(0.5f, 0.5f, 0.5f);
     scene->light_intensity = 0.4f;
     scene->light_attenuation = 0.03f;
 
@@ -110,17 +126,22 @@ update_and_render_scene(Basic_3D_Graphics_Scene* scene, Window* window) {
     }
     
     // Make the players camera fit the entire window
+    glm::vec4 viewport(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     auto camera = get_component(&scene->world, scene->camera, Camera);
     if (camera) {
         if (window->width != 0 && window->height != 0) {
             camera->aspect = ((f32) window->width)/((f32) window->height);
         }
-        camera->viewport = glm::vec4(0, 0, (f32) window->width, (f32) window->height);
+        camera->viewport = viewport;
     }
 
-    update_systems(&scene->world, 0.0f); // TODO(alexander): delta time!!!
+    // Update the world
+    update_systems(&scene->world, scene->main_systems, 0.0f); // TODO(alexander): delta time!!!
 
-    render_world(&scene->world);
+    // Render the world
+    begin_frame(scene->world.clear_color, viewport, true);
+    update_systems(&scene->world, scene->rendering_pipeline, 0.0f);
+    end_frame();
 
     // ImGui
     ImGui::Begin("Lab 3 - Basic 3D Graphics", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);

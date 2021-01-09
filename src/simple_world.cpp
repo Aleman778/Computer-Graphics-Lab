@@ -6,6 +6,8 @@
 
 struct Simple_World_Scene {
     World world;
+    std::vector<System> main_systems;
+    std::vector<System> rendering_pipeline;
     Entity_Handle player;
     Entity_Handle player_camera;
     f32 sensitivity;
@@ -75,8 +77,8 @@ control_player(World* world,
         speed = 0.08f;
     }
 
-    glm::vec3 forward(cos(rot->v.x + half_pi)*speed, 0.0f, sin(rot->v.x + half_pi)*speed);
-    glm::vec3 right(cos(rot->v.x)*speed, 0.0f, sin(rot->v.x)*speed);
+    glm::vec3 forward(cos(rot->v.x + pi + half_pi)*speed, 0.0f, sin(rot->v.x + pi + half_pi)*speed);
+    glm::vec3 right(cos(rot->v.x + pi)*speed, 0.0f, sin(rot->v.x + pi)*speed);
     if (input->w_key.ended_down) pos->v += forward;
     if (input->a_key.ended_down) pos->v += right;
     if (input->s_key.ended_down) pos->v -= forward;
@@ -87,17 +89,17 @@ control_player(World* world,
     if (was_pressed(&input->escape_key)) input->mouse_locked = false;
 
     // Invisible wall collision
-    if (pos->v.x >   0.0f) pos->v.x =   0.0f;
-    if (pos->v.x < -99.5f) pos->v.x = -99.5f;
-    if (pos->v.z >   0.0f) pos->v.z =   0.0f;
-    if (pos->v.z < -99.5f) pos->v.z = -99.5f;
+    if (pos->v.x <  0.0f) pos->v.x =   0.0f;
+    if (pos->v.x > 99.5f) pos->v.x = 99.5f;
+    if (pos->v.z <  0.0f) pos->v.z =   0.0f;
+    if (pos->v.z > 99.5f) pos->v.z = 99.5f;
 
     // Gravity
-    pos->v.y += 0.098f; // TODO(alexander): add to velocity
+    pos->v.y -= 0.098f; // TODO(alexander): add to velocity
 
     // Terrain collision
-    f32 terrain_height = -sample_point_at(terrain, -pos->v.x, -pos->v.z) - 1.8f;
-    if (pos->v.y > terrain_height) {
+    f32 terrain_height = sample_point_at(terrain, pos->v.x, pos->v.z) + 1.8f;
+    if (pos->v.y < terrain_height) {
         pos->v.y = terrain_height;
     }
 
@@ -167,12 +169,12 @@ initialize_scene(Simple_World_Scene* scene) {
 
     // Scene and world properties
     scene->world.clear_color = glm::vec4(0.01f, 0.01f, 0.01f, 1.0f);
-    scene->world.depth_testing = true;
     scene->world.fog_density = 0.05f;
     scene->world.fog_gradient = 2.0f;
-    scene->world.light_setup.position = glm::vec3(50.0f, 1.0f, 50.0f);
-    scene->world.light_setup.color = glm::vec3(1.0f, 1.0f, 1.0f);
-    scene->world.light_setup.ambient_intensity = 0.4f;
+    scene->world.light.pos = glm::vec3(50.0f, 1.0f, 50.0f);
+    scene->world.light.ambient = glm::vec3(0.1f, 0.1f, 0.1f);
+    scene->world.light.diffuse = glm::vec3(0.6f, 0.6f, 0.6f);
+    scene->world.light.specular = glm::vec3(0.5f, 0.5f, 0.5f);
     scene->enable_wireframe = false;
 
     // Setup random number generator for generating cuboid positions
@@ -184,15 +186,15 @@ initialize_scene(Simple_World_Scene* scene) {
     // Setup some reusable materials
     Material snow_ground_material = {};
     snow_ground_material.type = Material_Type_Phong;
-    snow_ground_material.Phong.diffuse_color = glm::vec3(1.0f);
-    snow_ground_material.Phong.diffuse_map = &scene->texture_snow_01_diffuse;
-    snow_ground_material.Phong.specular_map = &scene->texture_snow_01_specular;
-    snow_ground_material.Phong.shininess = 2.0f;
+    snow_ground_material.Phong.color = glm::vec3(1.0f);
+    snow_ground_material.Phong.diffuse = &scene->texture_snow_01_diffuse;
+    snow_ground_material.Phong.specular = &scene->texture_snow_01_specular;
+    snow_ground_material.Phong.shininess = 32.0f;
     snow_ground_material.Phong.shader = &scene->phong_shader;
 
     Material snow_material = snow_ground_material;
-    snow_material.Phong.diffuse_map = &scene->texture_snow_02_diffuse;
-    snow_material.Phong.specular_map = &scene->texture_snow_02_specular;
+    snow_material.Phong.diffuse = &scene->texture_snow_02_diffuse;
+    snow_material.Phong.specular = &scene->texture_snow_02_specular;
 
     // Setup the world
     World* world = &scene->world;
@@ -201,25 +203,26 @@ initialize_scene(Simple_World_Scene* scene) {
     Entity_Handle player = spawn_entity(world);
     scene->player = player;
     add_component(world, player, Local_To_World);
-    add_component(world, player, Position);
+    auto pos = add_component(world, player, Position);
+    pos->v = glm::vec3(50.0f, -50.0f, 50.0f);
     add_component(world, player, Rotation);
     add_component(world, player, Euler_Rotation);
 
     // Player Camera
     Entity_Handle player_camera = spawn_entity(world);
     scene->player_camera = player_camera;
-    world->main_camera = player_camera;
     auto camera = add_component(world, player_camera, Camera);
     camera->fov = half_pi;
     camera->near = 0.01f;
     camera->far = 100000.0f;
+    camera->is_orthographic = false;
     add_component(world, player_camera, Position);
     add_component(world, player_camera, Rotation);
     add_component(world, player_camera, Euler_Rotation);
 
     Entity_Handle test_sphere = spawn_entity(world);
     add_component(world, test_sphere, Local_To_World);
-    auto pos = add_component(world, test_sphere, Position);
+    pos = add_component(world, test_sphere, Position);
     pos->v = glm::vec3(50.0f, 1.0f, 50.0f);
     add_component(world, test_sphere, Rotation);
     auto renderer = add_component(world, test_sphere, Mesh_Renderer);
@@ -308,8 +311,12 @@ initialize_scene(Simple_World_Scene* scene) {
     //     set_local_transform(world, snowman_copy, tr.matrix);
     // }
 
-    register_transform_systems(world);
-    register_camera_systems(world);
+    // Setup main systems
+    push_transform_systems(scene->main_systems);
+    push_camera_systems(scene->main_systems);
+
+    // Setup rendering pipeline
+    push_mesh_renderer_system(scene->rendering_pipeline, &scene->player_camera);
 
     scene->sensitivity = 0.01f;
 
@@ -335,12 +342,13 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
                    scene->sensitivity);
 
     // Make the players camera fit the entire window
+    glm::vec4 viewport(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     auto camera = get_component(&scene->world, scene->player_camera, Camera);
     if (camera) {
         if (window->width != 0 && window->height != 0) {
             camera->aspect = ((f32) window->width)/((f32) window->height);
         }
-        camera->viewport = glm::vec4(0, 0, (f32) window->width, (f32) window->height);
+        camera->viewport = viewport;
     }
 
     // Use wireframe if enabled
@@ -350,22 +358,25 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
     } else {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
-    
-    update_systems(&scene->world, 0.0f); // TODO(alexander): delta time!!!
 
-    render_world(&scene->world);
+    // Update the world
+    update_systems(&scene->world, scene->main_systems, 0.0f); // TODO(alexander): delta time!!!
+
+    // Render the world
+    begin_frame(scene->world.clear_color, viewport, true);
+    update_systems(&scene->world, scene->rendering_pipeline, 0.0f);
+    end_frame();    
 
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::Text("Light Setup:");
-    ImGui::DragFloat3("Light position", &scene->world.light_setup.position.x);
-    ImGui::ColorEdit3("Light color", &scene->world.light_setup.color.x);
-    ImGui::SliderFloat("Ambient intensity", &scene->world.light_setup.ambient_intensity, 0.0f, 1.0f);
-
-    ImGui::Text("Sky:");
-    ImGui::ColorEdit3("Sky color", &scene->world.clear_color.x);
+    ImGui::DragFloat3("Position", &scene->world.light.pos.x);
+    ImGui::ColorEdit3("Ambient", &scene->world.light.ambient.x);
+    ImGui::ColorEdit3("Diffuse", &scene->world.light.diffuse.x);
+    ImGui::ColorEdit3("Specular", &scene->world.light.specular.x);
 
     ImGui::Text("Fog:");
+    ImGui::ColorEdit3("Color", &scene->world.clear_color.x);
     ImGui::SliderFloat("Density", &scene->world.fog_density, 0.01f, 0.5f);
     ImGui::SliderFloat("Gradient", &scene->world.fog_gradient, 1.0f, 10.0f);
     ImGui::Checkbox("Wireframe mode", &scene->enable_wireframe);

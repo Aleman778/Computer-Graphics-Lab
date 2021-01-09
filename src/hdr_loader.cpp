@@ -115,7 +115,7 @@ load_hdr_image(const char* filename, int* width, int* height) {
     FILE* file;
 
     errno_t error = fopen_s(&file, filename, "rb");
-    assert(error != 0 && "failed to open file");
+    assert(error == 0 && "failed to open file");
     if (!file)
         return NULL;
 

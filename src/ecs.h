@@ -69,6 +69,7 @@ struct Camera {
     f32 aspect;
     glm::mat4 proj;
     glm::mat4 view;
+    glm::mat4 view_proj;
     glm::vec4 viewport;
     bool is_orthographic; // perspective (false), orthographic (true)
 };
@@ -115,10 +116,10 @@ struct World;
  * On update system function pointer type takes the
  * delta time, entity handle and list of component data as input.
  */
-typedef void (*OnUpdateSystem)(World* world, f32 dt, Entity_Handle entity, void** components);
+typedef void (*OnUpdateSystem)(World* world, f32 dt, Entity_Handle entity, void** components, void* data);
 
-#define DEF_ON_UPDATE(system_name) \
-    void system_name(World* world, f32 dt, Entity_Handle handle, void** components)
+#define DEF_SYSTEM(system_name) \
+    void system_name(World* world, f32 dt, Entity_Handle handle, void** components, void* data)
 
 /**
  * System is just a function that takes some number of components as input.
@@ -148,14 +149,12 @@ struct World {
     std::vector<Entity> entities; // all the live entities
     std::vector<u32> handles; // lookup entity by handle, NOTE: only valid if the entity itself is alive!!!
     std::unordered_map<u32, std::vector<u8>> components; // where component data is stored
-    std::vector<System> systems;
 
-    Entity_Handle main_camera;
-    Light_Setup light_setup;
+    // should not be stored here!
+    Light_Setup light;
     f32 fog_density;
     f32 fog_gradient;
     glm::vec4 clear_color;
-    bool depth_testing;
 };
 
 inline bool is_alive(World* world, Entity_Handle entity);
@@ -163,8 +162,9 @@ Entity_Handle spawn_entity(World* world);
 void despawn_entity(World* world, Entity_Handle entity);
 Entity_Handle copy_entity(World* world, Entity_Handle entity);
 
-void*    _add_component(World* world, Entity_Handle handle, u32 id, usize size);
-bool  _remove_component(World* world, Entity_Handle handle, u32 id, usize size);
-void*    _get_component(World* world, Entity_Handle handle, u32 id, usize size);
-
-void render_world(World* world);
+void* _add_component(World* world, Entity_Handle handle, u32 id, usize size);
+bool _remove_component(World* world, Entity_Handle handle, u32 id, usize size);
+void* _get_component(World* world, Entity_Handle handle, u32 id, usize size);
+void _use_component(System& system, u32 id, u32 size, u32 flags=0);
+void push_system(std::vector<System>& systems, System system);
+void update_systems(const std::vector<System>& systems, f32 dt);
