@@ -109,12 +109,13 @@ decrunch(RGBE* scanline, int len, FILE* file) {
 }
 
 f32*
-load_hdr_image(const char* fileName, int* width, int* height) {
+load_hdr_image(const char* filename, int* width, int* height) {
     int i;
     char str[200];
-    FILE *file;
+    FILE* file;
 
-    file = fopen(fileName, "rb");
+    errno_t error = fopen_s(&file, filename, "rb");
+    assert(error == 0 && "failed to open file");
     if (!file)
         return NULL;
 
@@ -145,7 +146,7 @@ load_hdr_image(const char* fileName, int* width, int* height) {
     }
 
     int w, h;
-    if (!sscanf(reso, "-Y %ld +X %ld", &h, &w)) {
+    if (!sscanf_s(reso, "-Y %ld +X %ld", &h, &w)) {
         fclose(file);
         return NULL;
     }

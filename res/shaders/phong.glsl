@@ -6,27 +6,23 @@
 #shader GL_VERTEX_SHADER
 #version 330
 
-layout(location=0) in vec3 position;
-layout(location=1) in vec2 texcoord;
-layout(location=2) in vec3 normal;
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec2 a_texcoord;
+layout(location=2) in vec3 a_normal;
 
-out Fragment_Data {
-    vec3 position;
-    vec3 world_position;
-    vec2 texcoord;
-    vec3 normal;
-} fragment;
+out vec3 frag_pos;
+out vec2 texcoord;
+out vec3 normal;
 
 uniform mat4 model_transform;
 uniform mat4 mvp_transform;
 
 void main() {
-    fragment.position = position;
-    fragment.world_position = vec3(model_transform * vec4(position, 1.0f));
-    fragment.texcoord = texcoord;
-    fragment.normal   = normal;
+    frag_pos = vec3(model_transform * vec4(a_pos, 1.0f));
+    texcoord = a_texcoord;
+    normal = a_normal;
 
-    gl_Position = mvp_transform * vec4(position, 1.0f);
+    gl_Position = mvp_transform * vec4(a_pos, 1.0f);
 }
 
 /***************************************************************************
@@ -36,67 +32,63 @@ void main() {
 #shader GL_FRAGMENT_SHADER
 #version 330
 
-in Fragment_Data {
-    vec3 position;
-    vec3 world_position;
-    vec2 texcoord;
-    vec3 normal;
-} fragment;
+in vec3 frag_pos;
+in vec2 texcoord;
+in vec3 normal;
 
 out vec4 frag_color;
 
-// Scene dependant uniforms
 struct Light_Setup {
-    vec3 position;
-    vec3 view_position;
-    vec3 color;
-    float ambient_intensity;
+    vec3 pos;
+    vec3 view_pos;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
 };
 
-uniform Light_Setup light_setup;
-uniform vec3 sky_color;
-uniform float fog_density;
-uniform float fog_gradient;
-
-// Material depandant uniforms
 struct Material {
-    vec3 diffuse_color;
-    sampler2D diffuse_map;
-    sampler2D specular_map;
+    vec3 color;
+    sampler2D diffuse;
+    sampler2D specular;
     float shininess;
 };
 
 uniform Material material;
 
-const float specular_intensity = 0.5f;
+uniform Light_Setup light;
 
-vec3 apply_fog(in vec3 color) {
-    float dist = length(-light_setup.view_position - fragment.world_position);
-    float fog_amount = exp(-pow(dist * fog_density, fog_gradient));
-    fog_amount = clamp(fog_amount, 0.0f, 1.0f);
-    return mix(sky_color, color, fog_amount);
-}
+uniform vec3 fog_color;
+uniform float fog_density;
+uniform float fog_gradient;
 
 void main() {
-    // Texture color
-    vec3 diffuse_color = vec3(texture2D(material.diffuse_map, fragment.texcoord)) * material.diffuse_color;
-    vec3 specular_color = vec3(texture2D(material.specular_map, fragment.texcoord));
+    vec3 diffuse_texel = texture2D(material.diffuse, texcoord).rgb;
+    vec3 specular_texel = texture2D(material.specular, texcoord).rgb;
 
     // Ambient light
-    vec3 ambient = light_setup.ambient_intensity * diffuse_color;
+    vec3 ambient = diffuse_texel * material.color * light.ambient;
 
-    // Diffuse light
-    vec3 light_direction = normalize(light_setup.position - fragment.world_position);
-    float diffuse_amount = max(dot(fragment.normal, light_direction), 0.0f);
-    vec3 diffuse = diffuse_amount * diffuse_color;
+    // Calulate diffuse color
+    vec3 diffuse_color = diffuse_texel * material.color * light.diffuse;
+    vec3 light_direction = normalize(light.pos - frag_pos);
+    float diffuse_amount = max(dot(normal, light_direction), 0.0f);
+    vec3 diffuse         = diffuse_amount * diffuse_color;
 
-    // Specular light
-    vec3 view_direction = normalize(light_setup.view_position - fragment.world_position);
-    vec3 reflect_direction = reflect(-light_direction, fragment.normal);
+    // Calculate specular light
+    vec3 specular_color = specular_texel * light.specular;
+    vec3 view_direction = normalize(light.view_pos - frag_pos);
+    vec3 reflect_direction = normalize(reflect(-light_direction, normal));
     float specular_amount = pow(max(dot(view_direction, reflect_direction), 0.0f), material.shininess);
-    
-    vec3 specular = specular_intensity * specular_amount * specular_color;
+    vec3 specular = specular_amount * specular_color;
+
+    // Final phong shading color
+    vec3 phong_color = ambient + diffuse + specular;
+
+    // Calculate the amount of fog
+    float dist = length(-light.view_pos - frag_pos);
+    float fog_amount = exp(-pow(dist * fog_density, fog_gradient));
+    fog_amount = clamp(fog_amount, 0.0f, 1.0f);
 
     // Calculate the final fragment color
-    frag_color = vec4(apply_fog(ambient + diffuse + specular), 1.0f);
+    frag_color = vec4(mix(fog_color, phong_color, fog_amount), 1.0f); 
 }

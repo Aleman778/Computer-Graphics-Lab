@@ -153,6 +153,13 @@ static void
 window_cursor_pos_callback(GLFWwindow* glfw_window, double xpos, double ypos) {
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
+        if (window->input.mouse_locked) {
+            window->input.mouse_delta_x += (f32) xpos - window->width/2.0f;
+            window->input.mouse_delta_y += (f32) ypos - window->height/2.0f;
+        } else {
+            window->input.mouse_delta_x += (f32) xpos - window->input.mouse_x;
+            window->input.mouse_delta_y += (f32) ypos - window->input.mouse_y;
+        }
         window->input.mouse_x = (f32) xpos;
         window->input.mouse_y = (f32) ypos;
     }
@@ -307,9 +314,11 @@ main() {
             ImGui::Render();
         }
 
-        // reset input states and mouse scroll
-        window.input.mouse_scroll_x = 0;
-        window.input.mouse_scroll_y = 0;
+        // Reset input state
+        window.input.mouse_delta_x = 0.0f;
+        window.input.mouse_delta_y = 0.0f;
+        window.input.mouse_scroll_x = 0.0f;
+        window.input.mouse_scroll_y = 0.0f;
         window.input.left_mb.half_transition_count = 0;
         window.input.right_mb.half_transition_count = 0;
         window.input.middle_mb.half_transition_count = 0;

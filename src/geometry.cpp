@@ -94,7 +94,7 @@ void
 push_sphere(Mesh_Builder* mb, glm::vec3 c, f32 r, int detail_x=16, int detail_y=16) {
     detail_y *= 2;
 
-    usize base_index = mb->vertices.size();
+    u16 base_index = (u16) mb->vertices.size();
     for (int i = 0; i <= detail_x; i++) {
         for (int j = 0; j <= detail_y; j++) {
             f32 phi   = pi     * ((f32) i/(f32) detail_x) - half_pi;
@@ -123,7 +123,7 @@ push_sphere(Mesh_Builder* mb, glm::vec3 c, f32 r, int detail_x=16, int detail_y=
 void
 push_circle_triangle_strips(Mesh_Builder* mb, glm::vec3 c, glm::vec3 n, f32 r, int detail=16, bool reverse=false) {
     Vertex center_v = { c, glm::vec2(0.5f, 0.5f), n };
-    usize center_index = mb->vertices.size();
+    u16 center_index = (u16) mb->vertices.size();
     mb->vertices.push_back(center_v);
 
     // build bottom circle
@@ -143,7 +143,7 @@ push_cylinder_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int 
     glm::vec3 tc = glm::vec3(bc.x, bc.y - h, bc.z);
 
     push_circle_triangle_strips(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail, true);
-    usize base_index = mb->vertices.size();
+    u16 base_index = (u16) mb->vertices.size();
 
     for (int i = 0; i <= detail; i++) {
         f32 angle = two_pi * ((f32) i/ (f32) detail);
@@ -170,7 +170,7 @@ void
 push_cone_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int detail=16) {
     push_circle_triangle_strips(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail);
 
-    usize top_index = mb->vertices.size();
+    u16 top_index = (u16) mb->vertices.size();
     Vertex top_v = { glm::vec3(bc.x, bc.y + h, bc.z), glm::vec2(0.5f, 0.5f), glm::vec3(0.0f, 0.0f, 1.0f) };
     mb->vertices.push_back(top_v);
 
@@ -197,7 +197,7 @@ push_flat_plane(Mesh_Builder* mb,
 
     f32 dw = width/(f32) detail_x;
     f32 dh = height/(f32) detail_y;
-    usize base_index = mb->vertices.size();
+    u16 base_index = (u16) mb->vertices.size();
 
     for (int y = 0; y < detail_y; y++) {
         for (int x = 0; x < detail_x; x++) {
