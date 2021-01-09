@@ -189,7 +189,7 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_ground_material.Phong.color = glm::vec3(1.0f);
     snow_ground_material.Phong.diffuse = &scene->texture_snow_01_diffuse;
     snow_ground_material.Phong.specular = &scene->texture_snow_01_specular;
-    snow_ground_material.Phong.shininess = 32.0f;
+    snow_ground_material.Phong.shininess = 2.0f;
     snow_ground_material.Phong.shader = &scene->phong_shader;
 
     Material snow_material = snow_ground_material;
@@ -233,7 +233,7 @@ initialize_scene(Simple_World_Scene* scene) {
     sky_material.type = Material_Type_Sky;
     sky_material.Sky.map = &scene->texture_sky;
     sky_material.Sky.shader = &scene->sky_shader;
-                                //
+                                
     Entity_Handle sky = spawn_entity(world);
     renderer = add_component(world, sky, Mesh_Renderer);
     renderer->mesh = scene->mesh_sky;

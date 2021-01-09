@@ -348,7 +348,7 @@ DEF_SYSTEM(set_projection_system) {
 DEF_SYSTEM(prepare_camera_system) {
     auto camera = (Camera*) components[0];
     auto camera_pos = (Position*) components[1];
-    if (camera_pos) world->light.view_pos = -camera_pos->v;
+    if (camera_pos) world->light.view_pos = camera_pos->v;
     camera->view_proj = camera->proj * camera->view;
 }
 

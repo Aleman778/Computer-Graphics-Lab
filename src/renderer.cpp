@@ -80,7 +80,7 @@ apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuat
 
 inline void
 apply_material(const Material& material,
-               Light_Setup* light_setup,
+               Light_Setup* light,
                glm::vec3 fog_color,
                f32 fog_density,
                f32 fog_gradient) {
@@ -94,12 +94,12 @@ apply_material(const Material& material,
         case Material_Type_Phong: {
             const Phong_Shader* shader = material.Phong.shader;
             glUseProgram(shader->program);
-            if (light_setup) {
-                glUniform3fv(shader->light_setup.u_pos, 1, glm::value_ptr(light_setup->pos));
-                glUniform3fv(shader->light_setup.u_view_pos, 1, glm::value_ptr(light_setup->view_pos));
-                glUniform3fv(shader->light_setup.u_ambient, 1, glm::value_ptr(light_setup->ambient));
-                glUniform3fv(shader->light_setup.u_diffuse, 1, glm::value_ptr(light_setup->diffuse));
-                glUniform3fv(shader->light_setup.u_specular, 1, glm::value_ptr(light_setup->specular));
+            if (light) {
+                glUniform3fv(shader->light_setup.u_pos, 1, glm::value_ptr(light->pos));
+                glUniform3fv(shader->light_setup.u_view_pos, 1, glm::value_ptr(light->view_pos));
+                glUniform3fv(shader->light_setup.u_ambient, 1, glm::value_ptr(light->ambient));
+                glUniform3fv(shader->light_setup.u_diffuse, 1, glm::value_ptr(light->diffuse));
+                glUniform3fv(shader->light_setup.u_specular, 1, glm::value_ptr(light->specular));
             }
 
             glUniform3fv(shader->u_fog_color, 1, glm::value_ptr(fog_color));
@@ -162,7 +162,7 @@ draw_mesh(const Mesh& mesh,
             // Sky should not be moved by the camera!
             glm::mat4 vp_transform = glm::mat4(view_matrix);
             vp_transform[3].x = 0.0f;
-            vp_transform[3].y = 0.0f;
+            vp_transform[3].y = 20.0f;
             vp_transform[3].z = 0.0f;
             vp_transform = projection_matrix * vp_transform;
             glUniformMatrix4fv(sky->shader->u_vp_transform, 1, GL_FALSE, glm::value_ptr(vp_transform));

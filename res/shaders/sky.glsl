@@ -45,6 +45,6 @@ uniform Material material;
 void main() {
     vec4 fog_color = vec4(material.fog_color, 1.0f);
     vec4 texel_color = texture2D(material.map, fragment.texcoord);
-    float factor = 1.0f - exp(-pow(fragment.texcoord.y + 0.55f, 40.0f));
+    float factor = 1.0f - exp(-pow(fragment.texcoord.y + 0.50f, 40.0f));
     frag_color = mix(texel_color, fog_color, factor);
 }

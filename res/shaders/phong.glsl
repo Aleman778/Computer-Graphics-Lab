@@ -70,22 +70,22 @@ void main() {
 
     // Calulate diffuse color
     vec3 diffuse_color = diffuse_texel * material.color * light.diffuse;
-    vec3 light_direction = normalize(light.pos - frag_pos);
-    float diffuse_amount = max(dot(normal, light_direction), 0.0f);
-    vec3 diffuse         = diffuse_amount * diffuse_color;
+    vec3 light_dir = normalize(light.pos - frag_pos);
+    float diffuse_amount = max(dot(normal, light_dir), 0.0f);
+    vec3 diffuse = diffuse_amount * diffuse_color;
 
     // Calculate specular light
     vec3 specular_color = specular_texel * light.specular;
-    vec3 view_direction = normalize(light.view_pos - frag_pos);
-    vec3 reflect_direction = normalize(reflect(-light_direction, normal));
-    float specular_amount = pow(max(dot(view_direction, reflect_direction), 0.0f), material.shininess);
+    vec3 view_dir = normalize(light.view_pos - frag_pos);
+    vec3 reflect_dir = normalize(reflect(-light_dir, normal));
+    float specular_amount = pow(max(dot(view_dir, reflect_dir), 0.0f), material.shininess);
     vec3 specular = specular_amount * specular_color;
 
     // Final phong shading color
     vec3 phong_color = ambient + diffuse + specular;
 
     // Calculate the amount of fog
-    float dist = length(-light.view_pos - frag_pos);
+    float dist = length(light.view_pos - frag_pos);
     float fog_amount = exp(-pow(dist * fog_density, fog_gradient));
     fog_amount = clamp(fog_amount, 0.0f, 1.0f);
 
