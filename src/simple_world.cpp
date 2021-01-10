@@ -325,7 +325,7 @@ initialize_scene(Simple_World_Scene* scene) {
 }
 
 void
-update_and_render_scene(Simple_World_Scene* scene, Window* window) {
+update_scene(Simple_World_Scene* scene, Window* window, float dt) {
     if (!scene->is_initialized) {
         if (!initialize_scene(scene)) {
             is_running = false;
@@ -333,7 +333,7 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         }
     }
 
-    // Update player and its camera
+    // Update player and its camera TODO(alexander): should be moved into its own component!
     control_player(&scene->world,
                    scene->player,
                    scene->player_camera,
@@ -342,15 +342,20 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
                    scene->sensitivity);
 
     // Make the players camera fit the entire window
-    glm::vec4 viewport(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     auto camera = get_component(&scene->world, scene->player_camera, Camera);
     if (camera) {
         if (window->width != 0 && window->height != 0) {
             camera->aspect = ((f32) window->width)/((f32) window->height);
         }
-        camera->viewport = viewport;
+        camera->viewport = glm::vec4(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     }
 
+    // Update the world
+    update_systems(&scene->world, scene->main_systems, dt);
+}
+
+void
+render_scene(Simple_World_Scene* scene, Window* window, float dt) {
     // Use wireframe if enabled
     if (scene->enable_wireframe) {
         glLineWidth(2);
@@ -359,16 +364,14 @@ update_and_render_scene(Simple_World_Scene* scene, Window* window) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
-    // Update the world
-    update_systems(&scene->world, scene->main_systems, 0.0f); // TODO(alexander): delta time!!!
-
     // Render the world
-    begin_frame(scene->world.clear_color, viewport, true);
-    update_systems(&scene->world, scene->rendering_pipeline, 0.0f);
-    end_frame();    
+    auto camera = get_component(&scene->world, scene->player_camera, Camera);
+    begin_frame(scene->world.clear_color, camera->viewport, true);
+    update_systems(&scene->world, scene->rendering_pipeline, dt);
+    end_frame();
 
-    ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
-
+    // ImGui
+    ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 450), ImGuiWindowFlags_NoSavedSettings);
     ImGui::Text("Light Setup:");
     ImGui::DragFloat3("Position", &scene->world.light.pos.x);
     ImGui::ColorEdit3("Ambient", &scene->world.light.ambient.x);

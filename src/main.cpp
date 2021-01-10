@@ -154,14 +154,16 @@ window_cursor_pos_callback(GLFWwindow* glfw_window, double xpos, double ypos) {
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
         if (window->input.mouse_locked) {
-            window->input.mouse_delta_x += (f32) xpos - window->width/2.0f;
-            window->input.mouse_delta_y += (f32) ypos - window->height/2.0f;
+            window->input.mouse_delta_x += (f32) xpos - (f32) (window->width/2);
+            window->input.mouse_delta_y += (f32) ypos - (f32) (window->height/2);
+            window->input.mouse_x = (f32) (window->width/2);
+            window->input.mouse_y = (f32) (window->height/2);
         } else {
             window->input.mouse_delta_x += (f32) xpos - window->input.mouse_x;
             window->input.mouse_delta_y += (f32) ypos - window->input.mouse_y;
+            window->input.mouse_x = (f32) xpos;
+            window->input.mouse_y = (f32) ypos;
         }
-        window->input.mouse_x = (f32) xpos;
-        window->input.mouse_y = (f32) ypos;
     }
 }
 
@@ -197,11 +199,20 @@ read_entire_file_to_string(std::string filepath) {
     return str;
 }
 
+static double
+get_time() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>
+        (std::chrono::high_resolution_clock::now() - global_time_epoch).count() / 1000000000.0;
+}
+
 int
 main() {
     if (!glfwInit()) {
         return -1;
     }
+
+    // Setup time
+    global_time_epoch = std::chrono::high_resolution_clock::now();
 
     // Setup window information
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
@@ -266,89 +277,153 @@ main() {
     ImGui::CreateContext();
     ImGui_ImplGlfwGL3_Init(glfw_window, false);
     ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->AddFontFromFileTTF("../roboto.ttf", 18.0f);
+    std::ostringstream path_stream;
+    path_stream << res_folder;
+    path_stream << "fonts/roboto.ttf";
+    std::string filepath = path_stream.str();
+    io.Fonts->AddFontFromFileTTF(filepath.c_str(), 18.0f);
 
     // Vsync
     glfwSwapInterval(1);
 
-    // Programs main loop
+    // Set target frame time based on monitors refresh rate if possible
+    float target_frame_time = 1.0f/60.0f;
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    if (monitor) {
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        target_frame_time = 1.0f/(f32) mode->refreshRate;
+    }
+
+    // Main program loop
+    u32 fps = 0;
+    u32 fps_counter = 0;
+    bool show_performance_gui = false;
+    double last_time = get_time();
+    double fps_timer = 0.0;
+    double update_timer = 0.0;
     while (!glfwWindowShouldClose(glfw_window) && is_running) {
-        ImGui_ImplGlfwGL3_NewFrame();
+        double curr_time = get_time();
+        double delta_time = curr_time - last_time;
+        last_time = curr_time;
+        fps_timer += delta_time;
+        update_timer += delta_time;
 
-        if (ImGui::BeginMainMenuBar()) {
-            static bool labs_enabled = true;
-            if (ImGui::BeginMenu("Labs", labs_enabled)) {
-                if (ImGui::MenuItem("Lab 1 - Koch Snowflake")) current_scene_type = Scene_Koch_Snowflake;
-                if (ImGui::MenuItem("Lab 2 - Triangulation")) current_scene_type = Scene_Triangulation;
-                if (ImGui::MenuItem("Lab 3 - Basic 3D Graphics")) current_scene_type = Scene_Basic_3D_Graphics;
-                if (ImGui::MenuItem("Lab 4 - Simple World")) current_scene_type = Scene_Simple_World;
-                ImGui::EndMenu();
-            }
-            ImGui::EndMainMenuBar();
+        if (fps_timer >= 1.0) {
+            fps_timer = 0;
+            fps = fps_counter;
+            fps_counter = 0;
+        }
 
+        bool should_render = false;
+        while (update_timer >= target_frame_time) {
             switch (current_scene_type) {
                 case Scene_Koch_Snowflake: {
-                    update_and_render_scene(koch_snowflake_scene, &window);
+                    update_scene(koch_snowflake_scene, &window, target_frame_time);
                 } break;
 
                 case Scene_Triangulation: {
-                    update_and_render_scene(triangulation_scene, &window);
+                    update_scene(triangulation_scene, &window, target_frame_time);
                 } break;
 
                 case Scene_Basic_3D_Graphics: {
-                    update_and_render_scene(basic_3d_graphics_scene, &window);
+                    update_scene(basic_3d_graphics_scene, &window, target_frame_time);
                 } break;
 
                 case Scene_Simple_World: {
-                    update_and_render_scene(simple_world_scene, &window);
-                } break;
-
-                default: { // NOTE(alexander): invalid scene, just render background
-                    glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
-                    glClear(GL_COLOR_BUFFER_BIT);
+                    update_scene(simple_world_scene, &window, target_frame_time);
                 } break;
             }
+
+            // Update the timer
+            update_timer -= target_frame_time;
+            should_render = true;
         }
 
-        if (!window.input.mouse_locked) {
-            ImGui::Render();
-        }
+        // Render
+        if (should_render) {
+            ImGui_ImplGlfwGL3_NewFrame();
+            
+            if (ImGui::BeginMainMenuBar()) {
+                ImGui::Begin("Performance", &show_performance_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
+                ImGui::Text("FPS: %u\n", fps);
+                ImGui::Text("Average frame time: %f ms\n", 1000.0/(double) fps);
+                ImGui::End();
 
-        // Reset input state
-        window.input.mouse_delta_x = 0.0f;
-        window.input.mouse_delta_y = 0.0f;
-        window.input.mouse_scroll_x = 0.0f;
-        window.input.mouse_scroll_y = 0.0f;
-        window.input.left_mb.half_transition_count = 0;
-        window.input.right_mb.half_transition_count = 0;
-        window.input.middle_mb.half_transition_count = 0;
-        window.input.alt_key.half_transition_count = 0;
-        window.input.shift_key.half_transition_count = 0;
-        window.input.control_key.half_transition_count = 0;
-        window.input.escape_key.half_transition_count = 0;
-        window.input.w_key.half_transition_count = 0;
-        window.input.a_key.half_transition_count = 0;
-        window.input.s_key.half_transition_count = 0;
-        window.input.d_key.half_transition_count = 0;
-        window.input.e_key.half_transition_count = 0;
-        window.input.c_key.half_transition_count = 0;
+                switch (current_scene_type) {
+                    case Scene_Koch_Snowflake: {
+                        render_scene(koch_snowflake_scene, &window, target_frame_time);
+                    } break;
 
-        // handle mouse locking
-        if (window.input.mouse_locked) {
-            glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-            if (window.is_focused) {
-                glfwSetCursorPos(glfw_window, window.width / 2.0, window.height / 2.0);
+                    case Scene_Triangulation: {
+                        render_scene(triangulation_scene, &window, target_frame_time);
+                    } break;
+
+                    case Scene_Basic_3D_Graphics: {
+                        render_scene(basic_3d_graphics_scene, &window, target_frame_time);
+                    } break;
+
+                    case Scene_Simple_World: {
+                        render_scene(simple_world_scene, &window, target_frame_time);
+                    } break;
+
+                    default: {
+                        // NOTE(alexander): invalid scene, just render background
+                        glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
+                        glClear(GL_COLOR_BUFFER_BIT);
+                    } break;
+                }
+
+                static bool labs_enabled = true;
+                if (ImGui::BeginMenu("Labs", labs_enabled)) {
+                    if (ImGui::MenuItem("Lab 1 - Koch Snowflake")) current_scene_type = Scene_Koch_Snowflake;
+                    if (ImGui::MenuItem("Lab 2 - Triangulation")) current_scene_type = Scene_Triangulation;
+                    if (ImGui::MenuItem("Lab 3 - Basic 3D Graphics")) current_scene_type = Scene_Basic_3D_Graphics;
+                    if (ImGui::MenuItem("Lab 4 - Simple World")) current_scene_type = Scene_Simple_World;
+                    ImGui::EndMenu();
+                }
+
+                ImGui::EndMainMenuBar();
             }
+
+            if (!window.input.mouse_locked) {
+                ImGui::Render();
+            }
+
+            // Reset input state
+            window.input.mouse_delta_x = 0.0f;
+            window.input.mouse_delta_y = 0.0f;
+            window.input.mouse_scroll_x = 0.0f;
+            window.input.mouse_scroll_y = 0.0f;
+            window.input.left_mb.half_transition_count = 0;
+            window.input.right_mb.half_transition_count = 0;
+            window.input.middle_mb.half_transition_count = 0;
+            window.input.alt_key.half_transition_count = 0;
+            window.input.shift_key.half_transition_count = 0;
+            window.input.control_key.half_transition_count = 0;
+            window.input.escape_key.half_transition_count = 0;
+            window.input.w_key.half_transition_count = 0;
+            window.input.a_key.half_transition_count = 0;
+            window.input.s_key.half_transition_count = 0;
+            window.input.d_key.half_transition_count = 0;
+            window.input.e_key.half_transition_count = 0;
+            window.input.c_key.half_transition_count = 0;
+
+            // handle mouse locking
+            if (window.input.mouse_locked) {
+                glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+                if (window.is_focused) {
+                    glfwSetCursorPos(glfw_window, window.width/2, window.height/2);
+                }
+            } else {
+                glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+            
+            glfwSwapBuffers(glfw_window);
+            glfwPollEvents();
+
+            fps_counter++;
         } else {
-            glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        }
-
-        glfwSwapBuffers(glfw_window);
-        glfwPollEvents();
-
-        if (window.input.mouse_locked && !window.is_focused) {
-            window.input.mouse_x = window.width / 2.0f;
-            window.input.mouse_y = window.height / 2.0f;
+            std::this_thread::sleep_for(std::chrono::duration<int, std::milli>(1));
         }
     }
 

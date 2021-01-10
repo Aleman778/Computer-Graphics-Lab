@@ -280,6 +280,8 @@ DEF_SYSTEM(trs_local_to_world_system) {
     auto rot = (Rotation*) components[2];
     auto scl = (Scale*) components[3];
 
+    if (!pos && !rot && !scl) return; // NOTE(alexander): need at least one of these
+
     glm::mat4 T = pos ? glm::translate(glm::mat4(1.0f), pos->v) : glm::mat4(1.0f);
     glm::mat4 R = rot ? glm::toMat4(rot->q)                     : glm::mat4(1.0f);
     glm::mat4 S = scl ? glm::scale(glm::mat4(1.0f), scl->v)     : glm::mat4(1.0f);

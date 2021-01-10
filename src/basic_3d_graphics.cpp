@@ -100,7 +100,7 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
 }
 
 void
-update_and_render_scene(Basic_3D_Graphics_Scene* scene, Window* window) {
+update_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
     if (!scene->is_initialized) {
         if (!initialize_scene(scene)) {
             is_running = false;
@@ -126,27 +126,28 @@ update_and_render_scene(Basic_3D_Graphics_Scene* scene, Window* window) {
     }
     
     // Make the players camera fit the entire window
-    glm::vec4 viewport(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     auto camera = get_component(&scene->world, scene->camera, Camera);
     if (camera) {
         if (window->width != 0 && window->height != 0) {
             camera->aspect = ((f32) window->width)/((f32) window->height);
         }
-        camera->viewport = viewport;
+        camera->viewport = glm::vec4(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     }
 
     // Update the world
-    update_systems(&scene->world, scene->main_systems, 0.0f); // TODO(alexander): delta time!!!
+    update_systems(&scene->world, scene->main_systems, dt);
+}
 
-    // Render the world
-    begin_frame(scene->world.clear_color, viewport, true);
-    update_systems(&scene->world, scene->rendering_pipeline, 0.0f);
+void
+render_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
+    auto camera = get_component(&scene->world, scene->camera, Camera);
+    begin_frame(scene->world.clear_color, camera->viewport, true);
+    update_systems(&scene->world, scene->rendering_pipeline, dt);
     end_frame();
-
+    
     // ImGui
     ImGui::Begin("Lab 3 - Basic 3D Graphics", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
     ImGui::SliderFloat("Light intensity", &scene->light_intensity, 0.0f, 1.0f);
     ImGui::SliderFloat("Light attenuation", &scene->light_attenuation, 0.001f, 0.2f);
     ImGui::End();
-
 }

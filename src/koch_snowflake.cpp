@@ -24,6 +24,7 @@ struct Koch_Snowflake_Scene {
     f32 translation;
     f32 rotation;
     f32 scale;
+    glm::mat4 transform;
 
     // Render state
     int recursion_depth;
@@ -159,7 +160,7 @@ initialize_scene(Koch_Snowflake_Scene* scene) {
 }
 
 void
-update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
+update_scene(Koch_Snowflake_Scene* scene, Window* window, f32 dt) {
     if (!scene->is_initialized) {
         if (!initialize_scene(scene)) {
             is_running = false;
@@ -187,7 +188,11 @@ update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
     transform = glm::translate(transform, pos);
     transform = glm::scale(transform, glm::vec2(scale, scale));
     transform = glm::rotate(transform, scene->rotation);
+    scene->transform = transform;
+}
 
+void
+render_scene(Koch_Snowflake_Scene* scene, Window* window, f32 dt) {
     // Set viewport
     i32 size = window->width < window->height ? window->width : window->height;
     glViewport(window->width/2 - size/2, window->height/2 - size/2, size, size);
@@ -199,7 +204,7 @@ update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
     // Rendering the koch snowflake
     glUseProgram(scene->shader);
     glBindBuffer(GL_ARRAY_BUFFER, scene->fill_vbo[scene->recursion_depth - 1]);
-    glUniformMatrix3fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(transform));
+    glUniformMatrix3fv(scene->transform_uniform, 1, GL_FALSE, glm::value_ptr(scene->transform));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
@@ -225,9 +230,8 @@ update_and_render_scene(Koch_Snowflake_Scene* scene, Window* window) {
     glLineWidth(1);
     glUseProgram(0);
 
-    // Draw GUI
+    // ImGui
     ImGui::Begin("Lab 1 - Koch Snowflake", &scene->show_gui, ImVec2(180, 220), ImGuiWindowFlags_NoSavedSettings);
-
     ImGui::Text("Recursion Depth");
     ImGui::SliderInt("", &scene->recursion_depth, 1, max_recursion_depth);
     ImGui::Text("Fill Vertex Count: %zd", scene->fill_count[scene->recursion_depth - 1]);

@@ -37,6 +37,7 @@ struct Triangulation_Scene {
     Triangulation triangulation;
 
     Camera_2D camera;
+    glm::mat4 transform;
 
     std::mt19937 rng;
 
@@ -667,8 +668,28 @@ calculate_extended_picking(Triangulation* triangulation,
     calculate_extended_picking(triangulation, visited, highlight_color, t, curr->n[(prev_index + 2)%3], curr);
 }
 
+static void
+set_solid_color(Triangulation_Scene* scene, glm::vec4 color) {
+    for (int i = 0; i < scene->triangulation.vertices.size(); i++) {
+        scene->triangulation.vertices[i].color = color;
+    }
+    update_scene_buffer_data(scene);
+}
+
+static void
+retriangulate_points(Triangulation_Scene* scene) {
+    destroy_triangulation(&scene->triangulation);
+    scene->triangulation = build_triangulation_of_points(scene->points, scene->rng);
+    switch (scene->coloring_option) {
+        case 1: calculate_distance_coloring(scene); break;
+        case 2: calculate_4_coloring(scene); break;
+        default: set_solid_color(scene, scene->primary_color); break;
+    }
+};
+
+
 void
-update_and_render_scene(Triangulation_Scene* scene, Window* window) {
+update_scene(Triangulation_Scene* scene, Window* window, float dt) {
     if (!scene->is_initialized) {
         if (!initialize_scene(scene)) {
             is_running = false;
@@ -683,26 +704,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     glm::mat4 transform = glm::ortho(0.0f, (f32) window->width, (f32) window->height, 0.0f, 0.0f, 1000.0f);
     transform = glm::scale(transform, glm::vec3(scene->camera.zoom + 1.0f, scene->camera.zoom + 1.0f, 0));
     transform = glm::translate(transform, glm::vec3(scene->camera.x, scene->camera.y, 0));
-
-    // Bind vertex array
-    glBindVertexArray(scene->vao);
-
-    auto set_solid_color = [scene](glm::vec4 color) {
-        for (int i = 0; i < scene->triangulation.vertices.size(); i++) {
-            scene->triangulation.vertices[i].color = color;
-        }
-        update_scene_buffer_data(scene);
-    };
-
-    auto retriangulate_points = [scene, &set_solid_color]() {
-        destroy_triangulation(&scene->triangulation);
-        scene->triangulation = build_triangulation_of_points(scene->points, scene->rng);
-        switch (scene->coloring_option) {
-            case 1: calculate_distance_coloring(scene); break;
-            case 2: calculate_4_coloring(scene); break;
-            default: set_solid_color(scene->primary_color); break;
-        }
-    };
+    scene->transform = transform;
 
     // Mouse interaction
     f32 x = (window->input.mouse_x/(scene->camera.zoom + 1.0f) - scene->camera.x);
@@ -711,7 +713,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         if (window->input.shift_key.ended_down) {
             // Push new vertex interactively
             scene->points.emplace(glm::vec2(x, y));
-            retriangulate_points();
+            retriangulate_points(scene);
 
         } else {
             // Point location color selected node
@@ -748,6 +750,12 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
             }
         }
     }
+}
+
+void
+render_scene(Triangulation_Scene* scene, Window* window, float dt) {
+    // Bind vertex array
+    glBindVertexArray(scene->vao);
     
     // Begin rendering our basic 2D scene
     begin_frame(primary_bg_color, glm::vec4(0, 0, window->width, window->height));
@@ -756,7 +764,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     glUseProgram(scene->shader.program);
 
     // Render `filled` triangulated shape
-    glUniformMatrix4fv(scene->shader.u_mvp_transform, 1, GL_FALSE, glm::value_ptr(transform));
+    glUniformMatrix4fv(scene->shader.u_mvp_transform, 1, GL_FALSE, glm::value_ptr(scene->transform));
     glUniform4f(scene->shader.u_color, 1.0f, 1.0f, 1.0f, 1.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     if (scene->index_count > 0) glDrawElements(GL_TRIANGLES, scene->index_count, GL_UNSIGNED_INT, 0);
@@ -775,12 +783,15 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     if (scene->index_count > 0) glDrawElements(GL_POINTS, scene->index_count, GL_UNSIGNED_INT, 0);
     else glDrawArrays(GL_POINTS, 0, scene->vertex_count);
 
-    // Begin ImGui
+    // End the frame
+    end_frame();
+            
+    // ImGui
     ImGui::Begin("Lab 2 - Triangulation", &scene->show_gui, ImVec2(280, 350), ImGuiWindowFlags_NoSavedSettings);
     ImGui::Text("Modify Input Points:");
     if (ImGui::Button("Clear Points")) {
         scene->points.clear();
-        retriangulate_points();
+        retriangulate_points(scene);
     }
     if (ImGui::Button("Fixed Points")) {
         scene->points.clear();
@@ -790,7 +801,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         scene->points.emplace(glm::vec2(800,  200));
         scene->points.emplace(glm::vec2(600,  600));
         scene->points.emplace(glm::vec2(600,  400));
-        retriangulate_points();
+        retriangulate_points(scene);
     }
     if (ImGui::Button("Randomize Points")) {
         scene->points.clear();
@@ -798,7 +809,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         for (int i = 0; i < 64; i++) {
             scene->points.emplace(glm::vec2(290.0f + dist(scene->rng), dist(scene->rng)));
         }
-        retriangulate_points();
+        retriangulate_points(scene);
     }
 
     ImGui::Text("Picking options:");
@@ -808,7 +819,7 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
     
     ImGui::Text("Coloring options:");
     if (ImGui::RadioButton("Solid color", &scene->coloring_option, 0)) {
-        set_solid_color(scene->primary_color);
+        set_solid_color(scene, scene->primary_color);
     }
     if (ImGui::RadioButton("Coloring based on distance", &scene->coloring_option, 1)) {
         calculate_distance_coloring(scene);
@@ -817,12 +828,12 @@ update_and_render_scene(Triangulation_Scene* scene, Window* window) {
         calculate_4_coloring(scene);
     }
 
+    f32 x = (window->input.mouse_x/(scene->camera.zoom + 1.0f) - scene->camera.x);
+    f32 y = (window->input.mouse_y/(scene->camera.zoom + 1.0f) - scene->camera.y);
     ImGui::Text("Info:");
     ImGui::Text("Number of points: %zu", scene->points.size());
-    ImGui::Text("Number of triangles: %zu", triangulation->vertices.size()/3);
+    ImGui::Text("Number of triangles: %zu", scene->triangulation.vertices.size()/3);
     ImGui::Text("x = %.3f", x);
     ImGui::Text("y = %.3f", y);
     ImGui::End();
-
-    end_frame();
 }

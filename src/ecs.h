@@ -46,12 +46,12 @@ struct Position {
     glm::vec3 v;
 };
 
-struct Euler_Rotation {
-    glm::vec3 v;
-};
-
 struct Rotation {
     glm::quat q;
+};
+
+struct Euler_Rotation {
+    glm::vec3 v;
 };
 
 struct Scale {

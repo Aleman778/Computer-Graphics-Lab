@@ -14,6 +14,8 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <deque>
+#include <chrono>
+#include <thread>
 
 #include <glm.hpp>
 #include <gtx/hash.hpp>
@@ -65,6 +67,8 @@ static constexpr f32 quarter_pi = glm::pi<f32>()/4.0f;
 static constexpr f32 half_pi    = glm::pi<f32>()/2.0f;
 static constexpr f32 pi         = glm::pi<f32>();
 static constexpr f32 two_pi     = glm::pi<f32>()*2.0f;
+
+static std::chrono::time_point<std::chrono::high_resolution_clock> global_time_epoch;
 
 static bool is_running = true;
 
