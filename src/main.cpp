@@ -154,10 +154,10 @@ window_cursor_pos_callback(GLFWwindow* glfw_window, double xpos, double ypos) {
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
         if (window->input.mouse_locked) {
-            window->input.mouse_delta_x += (f32) xpos - (f32) (window->width/2);
-            window->input.mouse_delta_y += (f32) ypos - (f32) (window->height/2);
-            window->input.mouse_x = (f32) (window->width/2);
-            window->input.mouse_y = (f32) (window->height/2);
+            if (window->is_focused) {
+                window->input.mouse_delta_x += (f32) xpos - (f32) (window->width/2);
+                window->input.mouse_delta_y += (f32) ypos - (f32) (window->height/2);
+            }
         } else {
             window->input.mouse_delta_x += (f32) xpos - window->input.mouse_x;
             window->input.mouse_delta_y += (f32) ypos - window->input.mouse_y;
@@ -420,8 +420,12 @@ main() {
             
             glfwSwapBuffers(glfw_window);
             glfwPollEvents();
-
             fps_counter++;
+
+            if (window.input.mouse_locked && !window.is_focused) {
+                window.input.mouse_x = (f32) (window.width/2);
+                window.input.mouse_y = (f32) (window.height/2);
+            }
         } else {
             std::this_thread::sleep_for(std::chrono::duration<int, std::milli>(1));
         }

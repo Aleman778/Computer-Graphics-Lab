@@ -151,7 +151,7 @@ _remove_component(World* world, Entity* entity, u32 id, usize size) {
 void*
 _get_component(World* world, Entity* entity, u32 id, usize size) {
     assert(is_alive(world, entity->handle) && "cannot get component from despawned entity");
-    
+
     for (int i = 0; i < entity->components.size(); i++) {
         Component_Handle& component = entity->components[i];
 
@@ -237,7 +237,7 @@ update_systems(World* world, const std::vector<System>& systems, f32 dt) {
                 Entity_Handle handle = *((Entity_Handle*) &data[j]);
                 Entity* entity = get_entity(world, handle);
                 component_params[min_index] = &data[j + sizeof(Entity_Handle)];
-                
+
                 bool is_valid = true;
                 for (int k = 0; k < system.component_ids.size(); k++) {
                     if (k == min_index) continue;
@@ -296,7 +296,7 @@ push_transform_systems(std::vector<System>& systems) {
     use_component(euler_conv, Euler_Rotation);
     use_component(euler_conv, Rotation);
     push_system(systems, euler_conv);
-    
+
     System trs_world = {};
     trs_world.on_update = &trs_local_to_world_system;
     use_component(trs_world, Local_To_World);
@@ -304,6 +304,99 @@ push_transform_systems(std::vector<System>& systems) {
     use_component(trs_world, Rotation, System::Flag_Optional);
     use_component(trs_world, Scale,    System::Flag_Optional);
     push_system(systems, trs_world);
+}
+
+/***************************************************************************
+ * Hierarchical Transform System
+ ***************************************************************************/
+
+DEF_SYSTEM(parent_system) {
+    auto child_parent = (Parent*) components[0];
+    auto parent_parent = get_component(world, child_parent->handle, Parent);
+    if (!parent_parent) return;
+
+    // Swap so that parent world matrix is calculated first
+    if (parent_parent > child_parent) {
+        auto child = get_entity(world, handle);
+        auto parent = get_entity(world, child_parent->handle);
+
+        Parent temp = *child_parent;
+        *child_parent = *parent_parent;
+        *parent_parent = temp;
+
+        auto child_entity = ((Entity_Handle*) child_parent) - 1;
+        auto parent_entity = ((Entity_Handle*) parent_parent) - 1;
+
+        Entity_Handle entity_temp = *child_entity;
+        *child_entity = *parent_entity;
+        *parent_entity = entity_temp;
+
+        for (int i = 0; i < child->components.size(); i++) {
+            Component_Handle& component = child->components[i];
+            if (component.id == Parent_ID) {
+                component.offset = (usize) (((u8*) parent_parent) - &world->components[Parent_ID][0]);
+                break;
+            }
+        }
+
+        for (int i = 0; i < parent->components.size(); i++) {
+            Component_Handle& component = parent->components[i];
+            if (component.id == Parent_ID) {
+                component.offset = (usize) (((u8*) child_parent) - &world->components[Parent_ID][0]);
+                break;
+            }
+        }
+    }
+}
+
+DEF_SYSTEM(trs_local_to_parent_system) {
+    auto local_to_parent = (Local_To_Parent*) components[0];
+    auto pos = (Position*) components[1];
+    auto rot = (Rotation*) components[2];
+    auto scl = (Scale*) components[3];
+
+    if (!pos && !rot && !scl) return; // NOTE(alexander): need at least one of these
+
+    glm::mat4 T = pos ? glm::translate(glm::mat4(1.0f), pos->v) : glm::mat4(1.0f);
+    glm::mat4 R = rot ? glm::toMat4(rot->q)                     : glm::mat4(1.0f);
+    glm::mat4 S = scl ? glm::scale(glm::mat4(1.0f), scl->v)     : glm::mat4(1.0f);
+
+    local_to_parent->m = T * R * S;
+}
+
+DEF_SYSTEM(hierarchical_local_to_world_system) {
+    auto parent = (Parent*) components[0];
+    auto local_to_world = (Local_To_World*) components[1];
+    auto local_to_parent = (Local_To_Parent*) components[2];
+
+    usize test = (usize) (((u8*) parent) - &world->components[Parent_ID][0]);
+    auto parent_local_to_world = get_component(world, parent->handle, Local_To_World);
+    local_to_world->m = parent_local_to_world->m * local_to_parent->m;
+}
+
+void
+push_hierarchical_transform_systems(std::vector<System>& systems) {
+    push_transform_systems(systems);
+
+    System parent = {};
+    parent.on_update = &parent_system;
+    use_component(parent, Parent);
+    push_system(systems, parent);
+
+    System trs_parent = {};
+    trs_parent.on_update = &trs_local_to_parent_system;
+    use_component(trs_parent, Local_To_Parent);
+    use_component(trs_parent, Position, System::Flag_Optional);
+    use_component(trs_parent, Rotation, System::Flag_Optional);
+    use_component(trs_parent, Scale,    System::Flag_Optional);
+    push_system(systems, trs_parent);
+
+    System hierarchical_world = {};
+    hierarchical_world.on_update = &hierarchical_local_to_world_system;
+    use_component(hierarchical_world, Parent);
+    use_component(hierarchical_world, Local_To_World);
+    use_component(hierarchical_world, Local_To_Parent);
+    push_system(systems, hierarchical_world);
 }
 
 /***************************************************************************
@@ -362,7 +455,7 @@ push_camera_systems(std::vector<System>& systems) {
     use_component(view_system, Position, System::Flag_Optional);
     use_component(view_system, Rotation, System::Flag_Optional);
     push_system(systems, view_system);
-    
+
     System projection_system = {};
     projection_system.on_update = &set_projection_system;
     use_component(projection_system, Camera);
@@ -375,20 +468,19 @@ push_camera_systems(std::vector<System>& systems) {
     push_system(systems, prepare_system);
 }
 
-
 /***************************************************************************
  * Rendering Systems
  ***************************************************************************/
 
 DEF_SYSTEM(mesh_renderer_system) {
     assert(data && "missing targeted camera for rendering to");
-    
+
     auto camera = get_component(world, *((Entity_Handle*) data), Camera);
     auto mesh_renderer = (Mesh_Renderer*) components[0];
     auto local_to_world = (Local_To_World*) components[1];
 
     assert(camera && "missing camera component on target camera entity");
-    
+
     glm::mat4 model_matrix = local_to_world ? local_to_world->m : glm::mat4(1.0f);
     const Mesh mesh = mesh_renderer->mesh;
     const Material material = mesh_renderer->material;

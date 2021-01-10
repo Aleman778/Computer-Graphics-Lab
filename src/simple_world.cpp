@@ -10,6 +10,7 @@ struct Simple_World_Scene {
     std::vector<System> rendering_pipeline;
     Entity_Handle player;
     Entity_Handle player_camera;
+    Entity_Handle test_sphere;
     f32 sensitivity;
 
     Mesh mesh_cube;
@@ -221,13 +222,43 @@ initialize_scene(Simple_World_Scene* scene) {
     add_component(world, player_camera, Euler_Rotation);
 
     Entity_Handle test_sphere = spawn_entity(world);
+    scene->test_sphere = test_sphere;
     add_component(world, test_sphere, Local_To_World);
     pos = add_component(world, test_sphere, Position);
     pos->v = glm::vec3(50.0f, 1.0f, 50.0f);
     add_component(world, test_sphere, Rotation);
+    add_component(world, test_sphere, Euler_Rotation);
     auto renderer = add_component(world, test_sphere, Mesh_Renderer);
     renderer->mesh = scene->mesh_sphere;
     renderer->material = snow_material;
+
+    Entity_Handle sphere[10];
+    for (int i = 0; i < 10; i++) {
+        Entity_Handle child_test_sphere = spawn_entity(world);
+        sphere[i] = child_test_sphere;
+        add_component(world, child_test_sphere, Local_To_World);
+        add_component(world, child_test_sphere, Local_To_Parent);
+        pos = add_component(world, child_test_sphere, Position);
+        pos->v.x = 2.0f;
+        renderer = add_component(world, child_test_sphere, Mesh_Renderer);
+        renderer->mesh = scene->mesh_sphere;
+        renderer->material = snow_material;
+    }
+
+    for (int i = 9; i >= 1; i--) {
+        auto parent = add_component(world, sphere[i - 1], Parent);
+        parent->handle = sphere[i];
+    }
+    auto parent = add_component(world, sphere[9], Parent);
+    parent->handle = test_sphere;
+
+    // auto parent = add_component(world, sphere[0], Parent);
+    // parent->handle = test_sphere;
+    // for (int i = 0; i < 9; i++) {
+    //     auto parent = add_component(world, sphere[i + 1], Parent);
+    //     parent->handle = sphere[i];
+    // }
+
 
     Material sky_material = {};
     sky_material.type = Material_Type_Sky;
@@ -312,7 +343,7 @@ initialize_scene(Simple_World_Scene* scene) {
     // }
 
     // Setup main systems
-    push_transform_systems(scene->main_systems);
+    push_hierarchical_transform_systems(scene->main_systems);
     push_camera_systems(scene->main_systems);
 
     // Setup rendering pipeline
@@ -349,6 +380,9 @@ update_scene(Simple_World_Scene* scene, Window* window, float dt) {
         }
         camera->viewport = glm::vec4(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     }
+
+    auto rot = get_component(&scene->world, scene->test_sphere, Euler_Rotation);
+    rot->v.x += 0.01f;
 
     // Update the world
     update_systems(&scene->world, scene->main_systems, dt);

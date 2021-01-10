@@ -42,6 +42,14 @@ struct Local_To_World {
     glm::mat4 m;
 };
 
+struct Local_To_Parent {
+    glm::mat4 m;
+};
+
+struct Parent {
+    Entity_Handle handle;
+};
+
 struct Position {
     glm::vec3 v;
 };
@@ -86,6 +94,8 @@ struct Point_Light {
 };
 
 REGISTER_COMPONENT(Local_To_World);
+REGISTER_COMPONENT(Local_To_Parent);
+REGISTER_COMPONENT(Parent);
 REGISTER_COMPONENT(Position);
 REGISTER_COMPONENT(Euler_Rotation);
 REGISTER_COMPONENT(Rotation);
