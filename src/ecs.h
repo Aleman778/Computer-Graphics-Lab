@@ -87,12 +87,6 @@ struct Mesh_Renderer {
     Material material;
 };
 
-struct Point_Light {
-    glm::vec3 color;
-    f32 intensity;
-    f32 distance;
-};
-
 REGISTER_COMPONENT(Local_To_World);
 REGISTER_COMPONENT(Local_To_Parent);
 REGISTER_COMPONENT(Parent);
@@ -102,7 +96,6 @@ REGISTER_COMPONENT(Rotation);
 REGISTER_COMPONENT(Scale);
 REGISTER_COMPONENT(Camera);
 REGISTER_COMPONENT(Mesh_Renderer);
-REGISTER_COMPONENT(Point_Light);
 
 /**
  * Handle to a particular instance of a component.
@@ -160,11 +153,7 @@ struct World {
     std::vector<u32> handles; // lookup entity by handle, NOTE: only valid if the entity itself is alive!!!
     std::unordered_map<u32, std::vector<u8>> components; // where component data is stored
 
-    // should not be stored here!
-    Light_Setup light;
-    f32 fog_density;
-    f32 fog_gradient;
-    glm::vec4 clear_color;
+    Renderer renderer;
 };
 
 inline bool is_alive(World* world, Entity_Handle entity);

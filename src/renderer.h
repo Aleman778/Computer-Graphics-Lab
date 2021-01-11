@@ -1,4 +1,6 @@
 
+#define MAX_POINT_LIGHTS 4
+
 struct Mesh {
     GLuint  vbo;
     GLuint  ibo;
@@ -49,13 +51,24 @@ struct Phong_Shader {
     GLint u_fog_density; // increase density -> more fog (shorter view distance)
     GLint u_fog_gradient; // increase gradient -> sharper transition
 
+    GLint u_view_pos;
+
     struct {
-        GLint u_pos;
-        GLint u_view_pos;
+        GLint u_direction;
         GLint u_ambient;
         GLint u_diffuse;
         GLint u_specular;
-    } light_setup;
+    } directional_light;
+    
+    struct {
+        GLint u_position;
+        GLint u_constant;
+        GLint u_linear;
+        GLint u_quadratic;
+        GLint u_ambient;
+        GLint u_diffuse;
+        GLint u_specular;
+    } point_lights[MAX_POINT_LIGHTS];
 };
 
 struct Sky_Shader {
@@ -63,14 +76,6 @@ struct Sky_Shader {
     GLint u_map;
     GLint u_fog_color;
     GLint u_vp_transform;
-};
-
-struct Light_Setup {
-    glm::vec3 pos;
-    glm::vec3 view_pos;
-    glm::vec3 ambient;
-    glm::vec3 diffuse;
-    glm::vec3 specular;
 };
 
 enum Material_Type {
@@ -134,23 +139,49 @@ struct Camera_2D {
     f32 zoom;
 };
 
-void begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_testing=false);
+struct Directional_Light {
+    glm::vec3 direction;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+};
 
-void apply_basic_shader(Basic_Shader* shader, f32 light_intensity, f32 light_attenuation);
+struct Point_Light {
+    glm::vec3 position;
+    f32 constant;
+    f32 linear;
+    f32 quadratic;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+};
 
-void apply_material(Material* material,
-                           Light_Setup* light_setup=NULL,
-                           glm::vec3 sky_color=glm::vec3(0.0f),
-                           f32 fog_desnity=0.0f,
-                           f32 fog_gradient=0.0f);
+struct Renderer {
+    Material_Type prev_material;
+    Directional_Light directional_light;
+    Point_Light point_lights[4];
+    glm::vec3 view_pos;
 
-void draw_mesh(const Mesh& mesh,
-               const Material& material,
-               const glm::mat4& model_matrix,
-               const glm::mat4& view_matrix,
-               const glm::mat4& projection_matrix,
-               const glm::mat4& view_proj_matrix);
+    glm::vec4 fog_color;
+    f32 fog_density;
+    f32 fog_gradient;
 
+    f32 light_attenuation;
+    f32 light_intensity;
+};
+
+
+void begin_frame(const glm::vec4& clear_color,
+                 const glm::vec4& viewport,
+                 bool depth_testing=false);
+
+void apply_material(Renderer* renderer,
+                    const Material& material,
+                    const glm::mat4& model_matrix,
+                    const glm::mat4& view_matrix,
+                    const glm::mat4& projection_matrix,
+                    const glm::mat4& view_proj_matrix);
+void draw_mesh(const Mesh& mesh);
 void end_frame();
 
 void initialize_camera_3d(Camera_3D* camera,

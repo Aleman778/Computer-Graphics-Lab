@@ -342,37 +342,34 @@ main() {
         // Render
         if (should_render) {
             ImGui_ImplGlfwGL3_NewFrame();
-            
+
+            // Render current scene
+            switch (current_scene_type) {
+                case Scene_Koch_Snowflake: {
+                    render_scene(koch_snowflake_scene, &window, target_frame_time);
+                } break;
+
+                case Scene_Triangulation: {
+                    render_scene(triangulation_scene, &window, target_frame_time);
+                } break;
+
+                case Scene_Basic_3D_Graphics: {
+                    render_scene(basic_3d_graphics_scene, &window, target_frame_time);
+                } break;
+
+                case Scene_Simple_World: {
+                    render_scene(simple_world_scene, &window, target_frame_time);
+                } break;
+
+                default: {
+                    // NOTE(alexander): invalid scene, just render background
+                    glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                } break;
+            }
+
+            // Menu bar for switching between scenes
             if (ImGui::BeginMainMenuBar()) {
-                ImGui::Begin("Performance", &show_performance_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
-                ImGui::Text("FPS: %u\n", fps);
-                ImGui::Text("Average frame time: %f ms\n", 1000.0/(double) fps);
-                ImGui::End();
-
-                switch (current_scene_type) {
-                    case Scene_Koch_Snowflake: {
-                        render_scene(koch_snowflake_scene, &window, target_frame_time);
-                    } break;
-
-                    case Scene_Triangulation: {
-                        render_scene(triangulation_scene, &window, target_frame_time);
-                    } break;
-
-                    case Scene_Basic_3D_Graphics: {
-                        render_scene(basic_3d_graphics_scene, &window, target_frame_time);
-                    } break;
-
-                    case Scene_Simple_World: {
-                        render_scene(simple_world_scene, &window, target_frame_time);
-                    } break;
-
-                    default: {
-                        // NOTE(alexander): invalid scene, just render background
-                        glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
-                        glClear(GL_COLOR_BUFFER_BIT);
-                    } break;
-                }
-
                 static bool labs_enabled = true;
                 if (ImGui::BeginMenu("Labs", labs_enabled)) {
                     if (ImGui::MenuItem("Lab 1 - Koch Snowflake")) current_scene_type = Scene_Koch_Snowflake;

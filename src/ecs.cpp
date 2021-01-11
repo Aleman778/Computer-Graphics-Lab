@@ -443,7 +443,7 @@ DEF_SYSTEM(set_projection_system) {
 DEF_SYSTEM(prepare_camera_system) {
     auto camera = (Camera*) components[0];
     auto camera_pos = (Position*) components[1];
-    if (camera_pos) world->light.view_pos = camera_pos->v;
+    if (camera_pos) world->renderer.view_pos = camera_pos->v;
     camera->view_proj = camera->proj * camera->view;
 }
 
@@ -485,12 +485,9 @@ DEF_SYSTEM(mesh_renderer_system) {
     const Mesh mesh = mesh_renderer->mesh;
     const Material material = mesh_renderer->material;
 
-    apply_material(material,
-                   &world->light,
-                   world->clear_color,
-                   world->fog_density,
-                   world->fog_gradient);
-    draw_mesh(mesh, material, model_matrix, camera->view, camera->proj, camera->view_proj);
+    Renderer* renderer = &world->renderer;
+    apply_material(renderer, material, model_matrix, camera->view, camera->proj, camera->view_proj);
+    draw_mesh(mesh);
 }
 
 void

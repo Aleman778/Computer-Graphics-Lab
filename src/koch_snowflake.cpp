@@ -24,7 +24,7 @@ struct Koch_Snowflake_Scene {
     f32 translation;
     f32 rotation;
     f32 scale;
-    glm::mat4 transform;
+    glm::mat3 transform;
 
     // Render state
     int recursion_depth;
@@ -231,9 +231,8 @@ render_scene(Koch_Snowflake_Scene* scene, Window* window, f32 dt) {
     glUseProgram(0);
 
     // ImGui
-    ImGui::Begin("Lab 1 - Koch Snowflake", &scene->show_gui, ImVec2(180, 220), ImGuiWindowFlags_NoSavedSettings);
-    ImGui::Text("Recursion Depth");
-    ImGui::SliderInt("", &scene->recursion_depth, 1, max_recursion_depth);
+    ImGui::Begin("Lab 1 - Koch Snowflake", &scene->show_gui, ImVec2(300, 220), ImGuiWindowFlags_NoSavedSettings);
+    ImGui::SliderInt("Recursion Depth", &scene->recursion_depth, 1, max_recursion_depth);
     ImGui::Text("Fill Vertex Count: %zd", scene->fill_count[scene->recursion_depth - 1]);
     ImGui::Text("Outline Vertex Count: %zd", scene->outline_count[scene->recursion_depth - 1]);
     ImGui::Checkbox("Enable translation", &scene->enable_translation);

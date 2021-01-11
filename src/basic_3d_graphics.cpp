@@ -45,10 +45,10 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
 
     // Create all the graphics nodes
     for (int i = 0; i < 100; i++) {
-        Entity_Handle entity = spawn_entity(&scene->world);
+        Entity_Handle entity = spawn_entity(world);
         add_component(world, entity, Local_To_World);
         auto pos = add_component(world, entity, Position);
-        pos->v = glm::vec3(dist(rng)*3.0f, dist(rng)*2.0f, dist(rng) - 4.5f);
+        pos->v = glm::vec3(dist(rng)*300.0f, dist(rng)*200.0f, dist(rng) - 6.0f);
         
         auto renderer = add_component(world, entity, Mesh_Renderer);
         renderer->mesh = cuboid_mesh;
@@ -56,7 +56,7 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     }
 
     // Create the movable cube entity
-    Entity_Handle movable_cube = spawn_entity(&scene->world);
+    Entity_Handle movable_cube = spawn_entity(world);
     scene->movable_cube = movable_cube;
     material.Basic.color = green_color;
     add_component(world, movable_cube, Local_To_World);
@@ -75,7 +75,11 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     camera_component->near = 0.01f;
     camera_component->far = 100000.0f;
     camera_component->is_orthographic = false;
-    add_component(world, camera, Position);
+    pos = add_component(world, camera, Position);
+    pos->v = glm::vec3(0.0f);
+    add_component(world, camera, Rotation);
+    add_component(world, camera, Euler_Rotation);
+    
 
     // Setup main systems
     push_transform_systems(scene->main_systems);
@@ -85,15 +89,8 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     push_mesh_renderer_system(scene->rendering_pipeline, &scene->camera);
 
     // Scene and world properties
-    scene->world.clear_color = glm::vec4(0.01f, 0.01f, 0.01f, 1.0f);
-    scene->world.fog_density = 0.05f;
-    scene->world.fog_gradient = 2.0f;
-    scene->world.light.pos = glm::vec3(50.0f, 1.0f, 50.0f);
-    scene->world.light.ambient = glm::vec3(0.1f, 0.1f, 0.1f);
-    scene->world.light.diffuse = glm::vec3(0.6f, 0.6f, 0.6f);
-    scene->world.light.specular = glm::vec3(0.5f, 0.5f, 0.5f);
-    scene->light_intensity = 0.4f;
-    scene->light_attenuation = 0.03f;
+    world->renderer.light_intensity = 0.4f;
+    world->renderer.light_attenuation = 0.03f;
 
     scene->is_initialized = true;
     return true;
@@ -125,7 +122,7 @@ update_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
         if (window->input.e_key.ended_down) cube_pos->v.z -= speed;
     }
     
-    // Make the players camera fit the entire window
+    // Make the scene camera fit the entire window
     auto camera = get_component(&scene->world, scene->camera, Camera);
     if (camera) {
         if (window->width != 0 && window->height != 0) {
@@ -141,13 +138,14 @@ update_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
 void
 render_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
     auto camera = get_component(&scene->world, scene->camera, Camera);
-    begin_frame(scene->world.clear_color, camera->viewport, true);
+    begin_frame(primary_bg_color, camera->viewport, true);
     update_systems(&scene->world, scene->rendering_pipeline, dt);
     end_frame();
     
     // ImGui
     ImGui::Begin("Lab 3 - Basic 3D Graphics", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
-    ImGui::SliderFloat("Light intensity", &scene->light_intensity, 0.0f, 1.0f);
-    ImGui::SliderFloat("Light attenuation", &scene->light_attenuation, 0.001f, 0.2f);
+    ImGui::Text("Light:");
+    ImGui::SliderFloat("Intensity", &scene->world.renderer.light_intensity, 0.0f, 1.0f);
+    ImGui::SliderFloat("Attenuation", &scene->world.renderer.light_attenuation, 0.001f, 0.2f);
     ImGui::End();
 }

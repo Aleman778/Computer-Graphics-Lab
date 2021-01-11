@@ -787,7 +787,7 @@ render_scene(Triangulation_Scene* scene, Window* window, float dt) {
     end_frame();
             
     // ImGui
-    ImGui::Begin("Lab 2 - Triangulation", &scene->show_gui, ImVec2(280, 350), ImGuiWindowFlags_NoSavedSettings);
+    ImGui::Begin("Lab 2 - Triangulation", &scene->show_gui, ImVec2(280, 460), ImGuiWindowFlags_NoSavedSettings);
     ImGui::Text("Modify Input Points:");
     if (ImGui::Button("Clear Points")) {
         scene->points.clear();

@@ -168,16 +168,6 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->texture_sky              = load_texture_2d_from_file("satara_night_no_lamps_2k.hdr");
     // scene->texture_sky        = load_texture_2d_from_file("winter_lake_01_1k.hdr");
 
-    // Scene and world properties
-    scene->world.clear_color = glm::vec4(0.01f, 0.01f, 0.01f, 1.0f);
-    scene->world.fog_density = 0.05f;
-    scene->world.fog_gradient = 2.0f;
-    scene->world.light.pos = glm::vec3(50.0f, 1.0f, 50.0f);
-    scene->world.light.ambient = glm::vec3(0.1f, 0.1f, 0.1f);
-    scene->world.light.diffuse = glm::vec3(0.6f, 0.6f, 0.6f);
-    scene->world.light.specular = glm::vec3(0.5f, 0.5f, 0.5f);
-    scene->enable_wireframe = false;
-
     // Setup random number generator for generating cuboid positions
     std::random_device rd;
     std::mt19937 rng = std::mt19937(rd());
@@ -199,6 +189,19 @@ initialize_scene(Simple_World_Scene* scene) {
 
     // Setup the world
     World* world = &scene->world;
+
+    // Scene and world properties
+    world->renderer.fog_color = glm::vec4(0.01f, 0.01f, 0.01f, 1.0f);
+    world->renderer.fog_density = 0.05f;
+    world->renderer.fog_gradient = 2.0f;
+    world->renderer.point_lights[0].position  = glm::vec3(50.0f, 1.0f, 50.0f);
+    world->renderer.point_lights[0].constant  = 1.0f;
+    world->renderer.point_lights[0].linear    = 0.045f;
+    world->renderer.point_lights[0].quadratic = 0.0075f;
+    world->renderer.point_lights[0].ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
+    world->renderer.point_lights[0].diffuse   = glm::vec3(0.6f, 0.6f, 0.6f);
+    world->renderer.point_lights[0].specular  = glm::vec3(0.5f, 0.5f, 0.5f);
+    scene->enable_wireframe = false;
 
     // Player
     Entity_Handle player = spawn_entity(world);
@@ -400,22 +403,27 @@ render_scene(Simple_World_Scene* scene, Window* window, float dt) {
 
     // Render the world
     auto camera = get_component(&scene->world, scene->player_camera, Camera);
-    begin_frame(scene->world.clear_color, camera->viewport, true);
+    begin_frame(scene->world.renderer.fog_color, camera->viewport, true);
     update_systems(&scene->world, scene->rendering_pipeline, dt);
     end_frame();
 
     // ImGui
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 450), ImGuiWindowFlags_NoSavedSettings);
-    ImGui::Text("Light Setup:");
-    ImGui::DragFloat3("Position", &scene->world.light.pos.x);
-    ImGui::ColorEdit3("Ambient", &scene->world.light.ambient.x);
-    ImGui::ColorEdit3("Diffuse", &scene->world.light.diffuse.x);
-    ImGui::ColorEdit3("Specular", &scene->world.light.specular.x);
+    ImGui::Text("Point Light:");
+    ImGui::DragFloat3("Position",   &scene->world.renderer.point_lights[0].position.x);
+    ImGui::SliderFloat("Constant",  &scene->world.renderer.point_lights[0].constant, 0.0f, 1.0f);
+    ImGui::SliderFloat("Linear",    &scene->world.renderer.point_lights[0].linear, 0.0f, 1.0f);
+    ImGui::SliderFloat("Quadratic", &scene->world.renderer.point_lights[0].quadratic, 0.0f, 1.0f);
+    ImGui::ColorEdit3("Ambient",    &scene->world.renderer.point_lights[0].ambient.x);
+    ImGui::ColorEdit3("Diffuse",    &scene->world.renderer.point_lights[0].diffuse.x);
+    ImGui::ColorEdit3("Specular",   &scene->world.renderer.point_lights[0].specular.x);
 
     ImGui::Text("Fog:");
-    ImGui::ColorEdit3("Color", &scene->world.clear_color.x);
-    ImGui::SliderFloat("Density", &scene->world.fog_density, 0.01f, 0.5f);
-    ImGui::SliderFloat("Gradient", &scene->world.fog_gradient, 1.0f, 10.0f);
+    ImGui::ColorEdit3("Color", &scene->world.renderer.fog_color.x);
+    ImGui::SliderFloat("Density", &scene->world.renderer.fog_density, 0.01f, 0.5f);
+    ImGui::SliderFloat("Gradient", &scene->world.renderer.fog_gradient, 1.0f, 10.0f);
+
+    ImGui::Text("Miscellaneous:");
     ImGui::Checkbox("Wireframe mode", &scene->enable_wireframe);
     ImGui::End();
 }
