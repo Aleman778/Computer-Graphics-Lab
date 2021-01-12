@@ -1,3 +1,4 @@
+
 Mesh
 create_mesh_from_builder(Mesh_Builder* mb) {
     Mesh mesh = {};
@@ -50,9 +51,9 @@ begin_frame(const glm::vec4& clear_color, const glm::vec4& viewport, bool depth_
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
 
-        // glEnable(GL_CULL_FACE);
-        // glCullFace(GL_BACK);
-        // glFrontFace(GL_CCW);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
     }
 
     // Set viewport
@@ -496,7 +497,7 @@ compile_phong_shader() {
     shader.directional_light.u_diffuse = glGetUniformLocation(program, "directional_light.diffuse");
     shader.directional_light.u_specular = glGetUniformLocation(program, "directional_light.specular");
  
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
         char buf[30];
         snprintf(buf, 30, "point_lights[%d].position", i);
         shader.point_lights[i].u_position = glGetUniformLocation(program, buf);

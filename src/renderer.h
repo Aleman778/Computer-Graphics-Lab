@@ -1,5 +1,5 @@
 
-#define MAX_POINT_LIGHTS 4
+#define MAX_POINT_LIGHTS 2
 
 struct Mesh {
     GLuint  vbo;

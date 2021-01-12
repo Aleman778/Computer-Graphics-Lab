@@ -196,11 +196,18 @@ initialize_scene(Simple_World_Scene* scene) {
     world->renderer.fog_gradient = 2.0f;
     world->renderer.point_lights[0].position  = glm::vec3(50.0f, 1.0f, 50.0f);
     world->renderer.point_lights[0].constant  = 1.0f;
-    world->renderer.point_lights[0].linear    = 0.045f;
-    world->renderer.point_lights[0].quadratic = 0.0075f;
+    world->renderer.point_lights[0].linear    = 0.09f;
+    world->renderer.point_lights[0].quadratic = 0.032f;
     world->renderer.point_lights[0].ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
     world->renderer.point_lights[0].diffuse   = glm::vec3(0.6f, 0.6f, 0.6f);
     world->renderer.point_lights[0].specular  = glm::vec3(0.5f, 0.5f, 0.5f);
+    world->renderer.point_lights[1].position  = glm::vec3(50.0f, 1.0f, 50.0f);
+    world->renderer.point_lights[1].constant  = 1.0f;
+    world->renderer.point_lights[1].linear    = 0.09f;
+    world->renderer.point_lights[1].quadratic = 0.032f;
+    world->renderer.point_lights[1].ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
+    world->renderer.point_lights[1].diffuse   = glm::vec3(0.6f, 0.6f, 0.6f);
+    world->renderer.point_lights[1].specular  = glm::vec3(0.5f, 0.5f, 0.5f);
     scene->enable_wireframe = false;
 
     // Player
@@ -411,9 +418,9 @@ render_scene(Simple_World_Scene* scene, Window* window, float dt) {
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 450), ImGuiWindowFlags_NoSavedSettings);
     ImGui::Text("Point Light:");
     ImGui::DragFloat3("Position",   &scene->world.renderer.point_lights[0].position.x);
-    ImGui::SliderFloat("Constant",  &scene->world.renderer.point_lights[0].constant, 0.0f, 1.0f);
-    ImGui::SliderFloat("Linear",    &scene->world.renderer.point_lights[0].linear, 0.0f, 1.0f);
-    ImGui::SliderFloat("Quadratic", &scene->world.renderer.point_lights[0].quadratic, 0.0f, 1.0f);
+    ImGui::SliderFloat("Constant",  &scene->world.renderer.point_lights[0].constant, 0.0f, 2.0f);
+    ImGui::SliderFloat("Linear",    &scene->world.renderer.point_lights[0].linear, 0.0f, 2.0f);
+    ImGui::SliderFloat("Quadratic", &scene->world.renderer.point_lights[0].quadratic, 0.0f, 2.0f);
     ImGui::ColorEdit3("Ambient",    &scene->world.renderer.point_lights[0].ambient.x);
     ImGui::ColorEdit3("Diffuse",    &scene->world.renderer.point_lights[0].diffuse.x);
     ImGui::ColorEdit3("Specular",   &scene->world.renderer.point_lights[0].specular.x);
