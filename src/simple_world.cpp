@@ -10,7 +10,6 @@ struct Simple_World_Scene {
     std::vector<System> rendering_pipeline;
     Entity_Handle player;
     Entity_Handle player_camera;
-    f32 sensitivity;
 
     Phong_Shader phong_shader;
     Sky_Shader sky_shader;
@@ -32,30 +31,33 @@ struct Simple_World_Scene {
     bool is_initialized;
 };
 
-void
-control_player(World* world,
-               Entity_Handle player,
-               Entity_Handle camera,
-               Input* input,
-               Height_Map* terrain,
-               f32 sensitivity) {
+struct Player_Controller {
+    Entity_Handle camera;
+    Input* input;
+    Height_Map* terrain;
+    f32 sensitivity;
+};
 
-    auto pos = get_component(world, player, Position);
-    auto rot = get_component(world, player, Euler_Rotation);
+REGISTER_COMPONENT(Player_Controller);
+
+DEF_SYSTEM(player_controller_system) {
+    auto pc  = (Player_Controller*) components[0];
+    auto pos = (Position*)          components[1];
+    auto rot = (Euler_Rotation*)    components[2];
 
     // Looking around, whenever mouse is locked, left click in window to lock, press escape to unlock.
-    if (input->mouse_locked) {
-        f32 delta_x = input->mouse_delta_x;
-        f32 delta_y = input->mouse_delta_y;
+    if (pc->input->mouse_locked) {
+        f32 delta_x = pc->input->mouse_delta_x;
+        f32 delta_y = pc->input->mouse_delta_y;
 
         bool is_dirty = false;
         if (delta_x > 0.1f || delta_x < -0.1f) {
-            rot->v.x += delta_x * sensitivity;
+            rot->v.x += delta_x * pc->sensitivity;
             is_dirty = true;
         }
 
         if (delta_y > 0.1f || delta_y < -0.1f) {
-            rot->v.y += delta_y * sensitivity;
+            rot->v.y += delta_y * pc->sensitivity;
             if (rot->v.y < -1.5f) {
                 rot->v.y = -1.5f;
             }
@@ -68,20 +70,20 @@ control_player(World* world,
 
     // Walking
     float speed = 0.04f;
-    if (input->shift_key.ended_down) {
+    if (pc->input->shift_key.ended_down) {
         speed = 0.08f;
     }
 
     glm::vec3 forward(cos(rot->v.x + pi + half_pi)*speed, 0.0f, sin(rot->v.x + pi + half_pi)*speed);
     glm::vec3 right(cos(rot->v.x + pi)*speed, 0.0f, sin(rot->v.x + pi)*speed);
-    if (input->w_key.ended_down) pos->v += forward;
-    if (input->a_key.ended_down) pos->v += right;
-    if (input->s_key.ended_down) pos->v -= forward;
-    if (input->d_key.ended_down) pos->v -= right;
+    if (pc->input->w_key.ended_down) pos->v += forward;
+    if (pc->input->a_key.ended_down) pos->v += right;
+    if (pc->input->s_key.ended_down) pos->v -= forward;
+    if (pc->input->d_key.ended_down) pos->v -= right;
 
     // Enable/ disable mouse locking
-    if (was_pressed(&input->left_mb)) input->mouse_locked = true;
-    if (was_pressed(&input->escape_key)) input->mouse_locked = false;
+    if (was_pressed(&pc->input->left_mb)) pc->input->mouse_locked = true;
+    if (was_pressed(&pc->input->escape_key)) pc->input->mouse_locked = false;
 
     // Invisible wall collision
     if (pos->v.x <  0.0f) pos->v.x =   0.0f;
@@ -93,14 +95,14 @@ control_player(World* world,
     pos->v.y -= 0.098f; // TODO(alexander): add to velocity
 
     // Terrain collision
-    f32 terrain_height = sample_point_at(terrain, pos->v.x, pos->v.z) + 1.8f;
+    f32 terrain_height = sample_point_at(pc->terrain, pos->v.x, pos->v.z) + 1.8f;
     if (pos->v.y < terrain_height) {
         pos->v.y = terrain_height;
     }
 
     // Update the camera to players position
-    auto camera_pos = get_component(world, camera, Position);
-    auto camera_rot = get_component(world, camera, Euler_Rotation);
+    auto camera_pos = get_component(world, pc->camera, Position);
+    auto camera_rot = get_component(world, pc->camera, Euler_Rotation);
 
     if (camera_pos) camera_pos->v = pos->v;
     if (camera_rot) camera_rot->v = rot->v;
@@ -146,7 +148,7 @@ spawn_static_mesh_entity(World* world,
 }
 
 static bool
-initialize_scene(Simple_World_Scene* scene) {
+initialize_scene(Simple_World_Scene* scene, Window* window) {
     scene->phong_shader = compile_phong_shader();
     scene->sky_shader = compile_sky_shader();
 
@@ -262,15 +264,6 @@ initialize_scene(Simple_World_Scene* scene) {
     world->renderer.directional_light.specular  = glm::vec3(0.02f, 0.02f, 0.04f);
     scene->enable_wireframe = false;
 
-    // Player
-    Entity_Handle player = spawn_entity(world);
-    scene->player = player;
-    add_component(world, player, Local_To_World);
-    auto pos = add_component(world, player, Position);
-    pos->v = glm::vec3(50.0f, -50.0f, 50.0f);
-    add_component(world, player, Rotation);
-    add_component(world, player, Euler_Rotation);
-
     // Player Camera
     Entity_Handle player_camera = spawn_entity(world);
     scene->player_camera = player_camera;
@@ -282,6 +275,20 @@ initialize_scene(Simple_World_Scene* scene) {
     add_component(world, player_camera, Position);
     add_component(world, player_camera, Rotation);
     add_component(world, player_camera, Euler_Rotation);
+
+    // Player
+    Entity_Handle player = spawn_entity(world);
+    scene->player = player;
+    auto pc = add_component(world, player, Player_Controller);
+    pc->camera = player_camera;
+    pc->input = &window->input;
+    pc->terrain = &scene->terrain;
+    pc->sensitivity = 0.01f;
+    add_component(world, player, Local_To_World);
+    auto pos = add_component(world, player, Position);
+    pos->v = glm::vec3(50.0f, -50.0f, 50.0f);
+    add_component(world, player, Rotation);
+    add_component(world, player, Euler_Rotation);
 
     Material sky_material = {};
     sky_material.type = Material_Type_Sky;
@@ -296,15 +303,6 @@ initialize_scene(Simple_World_Scene* scene) {
     Entity_Handle terrain = spawn_entity(world);
     renderer = add_component(world, terrain, Mesh_Renderer);
     renderer->mesh = mesh_terrain;
-    renderer->material = snow_ground_material;
-
-    Entity_Handle cube = spawn_entity(world);
-    add_component(world, cube, Local_To_World);
-    pos = add_component(world, cube, Position);
-    pos->v = glm::vec3(50.0f, 0.0f, 50.0f);
-    pos->v.y = sample_point_at(&scene->terrain, pos->v.x, pos->v.z) + 0.5f;
-    renderer = add_component(world, cube, Mesh_Renderer);
-    renderer->mesh = mesh_cube;
     renderer->material = snow_ground_material;
 
     // Create many snowmen
@@ -395,23 +393,29 @@ initialize_scene(Simple_World_Scene* scene) {
                                  glm::vec3(0.0f, pi+0.08f, 0.0f),
                                  glm::vec3(0.4f, 8.0f, 0.1f));
 
-        world->renderer.point_lights[i].position  = glm::vec3(p.x, p.y + 3.0f, p.z);
-        world->renderer.point_lights[i].constant  = 1.0f;
-        world->renderer.point_lights[i].linear    = 0.14f;
-        world->renderer.point_lights[i].quadratic = 0.07f;
+        world->renderer.point_lights[i].position  = glm::vec3(p.x, p.y + 5.2f, p.z);
+        world->renderer.point_lights[i].constant  = 0.3f;
+        world->renderer.point_lights[i].linear    = 0.09f;
+        world->renderer.point_lights[i].quadratic = 0.032f;
         world->renderer.point_lights[i].ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
-        world->renderer.point_lights[i].diffuse   = glm::vec3(0.6f, 0.6f, 0.6f);
-        world->renderer.point_lights[i].specular  = glm::vec3(0.5f, 0.5f, 0.5f);
+        world->renderer.point_lights[i].diffuse   = glm::vec3(1.0f, 1.0f, 1.0f);
+        world->renderer.point_lights[i].specular  = glm::vec3(1.0f, 1.0f, 1.0f);
     }
 
     // Setup main systems
+    System controller = {};
+    controller.on_update = &player_controller_system;
+    use_component(controller, Player_Controller);
+    use_component(controller, Position);
+    use_component(controller, Euler_Rotation);
+    push_system(scene->main_systems, controller);
+
     push_hierarchical_transform_systems(scene->main_systems);
+
     push_camera_systems(scene->main_systems);
 
     // Setup rendering pipeline
     push_mesh_renderer_system(scene->rendering_pipeline, &scene->player_camera);
-
-    scene->sensitivity = 0.01f;
 
     scene->is_initialized = true;
     return true;
@@ -420,19 +424,11 @@ initialize_scene(Simple_World_Scene* scene) {
 void
 update_scene(Simple_World_Scene* scene, Window* window, float dt) {
     if (!scene->is_initialized) {
-        if (!initialize_scene(scene)) {
+        if (!initialize_scene(scene, window)) {
             is_running = false;
             return;
         }
     }
-
-    // Update player and its camera TODO(alexander): should be moved into its own component!
-    control_player(&scene->world,
-                   scene->player,
-                   scene->player_camera,
-                   &window->input,
-                   &scene->terrain,
-                   scene->sensitivity);
 
     // Make the players camera fit the entire window
     auto camera = get_component(&scene->world, scene->player_camera, Camera);
@@ -477,18 +473,18 @@ render_scene(Simple_World_Scene* scene, Window* window, float dt) {
         "Point Light 4"};
     ImGui::Combo("", &curr_light, light_names, MAX_POINT_LIGHTS + 1);
     if (curr_light == 0) {
-        ImGui::DragFloat3("Direction",  &world->renderer.directional_light.direction.x, 0.001f);
+        ImGui::DragFloat3("Direction",  &world->renderer.directional_light.direction.x, 0.01f);
         ImGui::ColorEdit3("Ambient",    &world->renderer.directional_light.ambient.x);
         ImGui::ColorEdit3("Diffuse",    &world->renderer.directional_light.diffuse.x);
         ImGui::ColorEdit3("Specular",   &world->renderer.directional_light.specular.x);
     } else {
-        ImGui::DragFloat3("Position",   &world->renderer.point_lights[curr_light - 1].position.x);
-        ImGui::SliderFloat("Constant",  &world->renderer.point_lights[curr_light - 1].constant, 0.0f, 2.0f);
-        ImGui::SliderFloat("Linear",    &world->renderer.point_lights[curr_light - 1].linear, 0.0f, 2.0f);
-        ImGui::SliderFloat("Quadratic", &world->renderer.point_lights[curr_light - 1].quadratic, 0.0f, 2.0f);
-        ImGui::ColorEdit3("Ambient",    &world->renderer.point_lights[curr_light - 1].ambient.x);
-        ImGui::ColorEdit3("Diffuse",    &world->renderer.point_lights[curr_light - 1].diffuse.x);
-        ImGui::ColorEdit3("Specular",   &world->renderer.point_lights[curr_light - 1].specular.x);
+        ImGui::DragFloat3("Position", &world->renderer.point_lights[curr_light - 1].position.x, 0.1f);
+        ImGui::DragFloat("Constant",  &world->renderer.point_lights[curr_light - 1].constant, 0.001f);
+        ImGui::DragFloat("Linear",    &world->renderer.point_lights[curr_light - 1].linear, 0.001f);
+        ImGui::DragFloat("Quadratic", &world->renderer.point_lights[curr_light - 1].quadratic, 0.001f);
+        ImGui::ColorEdit3("Ambient",  &world->renderer.point_lights[curr_light - 1].ambient.x);
+        ImGui::ColorEdit3("Diffuse",  &world->renderer.point_lights[curr_light - 1].diffuse.x);
+        ImGui::ColorEdit3("Specular", &world->renderer.point_lights[curr_light - 1].specular.x);
     }
 
     ImGui::Text("Fog:");

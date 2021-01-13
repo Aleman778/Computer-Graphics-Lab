@@ -48,8 +48,7 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
         Entity_Handle entity = spawn_entity(world);
         add_component(world, entity, Local_To_World);
         auto pos = add_component(world, entity, Position);
-        pos->v = glm::vec3(dist(rng)*300.0f, dist(rng)*200.0f, dist(rng) - 6.0f);
-        
+        pos->v = glm::vec3(dist(rng)*3.0f, dist(rng)*2.0f, dist(rng) - 6.0f);
         auto renderer = add_component(world, entity, Mesh_Renderer);
         renderer->mesh = cuboid_mesh;
         renderer->material = material;
@@ -58,11 +57,11 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     // Create the movable cube entity
     Entity_Handle movable_cube = spawn_entity(world);
     scene->movable_cube = movable_cube;
-    material.Basic.color = green_color;
     add_component(world, movable_cube, Local_To_World);
     auto pos = add_component(world, movable_cube, Position);
     pos->v = glm::vec3(0.0f, 0.0f, -1.0f);
-        
+
+    material.Basic.color = green_color;
     auto renderer = add_component(world, movable_cube, Mesh_Renderer);
     renderer->mesh = cuboid_mesh;
     renderer->material = material;
@@ -79,7 +78,6 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     pos->v = glm::vec3(0.0f);
     add_component(world, camera, Rotation);
     add_component(world, camera, Euler_Rotation);
-    
 
     // Setup main systems
     push_transform_systems(scene->main_systems);
@@ -121,7 +119,7 @@ update_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
         if (window->input.c_key.ended_down) cube_pos->v.z += speed;
         if (window->input.e_key.ended_down) cube_pos->v.z -= speed;
     }
-    
+
     // Make the scene camera fit the entire window
     auto camera = get_component(&scene->world, scene->camera, Camera);
     if (camera) {
@@ -141,7 +139,7 @@ render_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
     begin_frame(primary_bg_color, camera->viewport, true);
     update_systems(&scene->world, scene->rendering_pipeline, dt);
     end_frame();
-    
+
     // ImGui
     ImGui::Begin("Lab 3 - Basic 3D Graphics", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
     ImGui::Text("Light:");

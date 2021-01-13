@@ -74,13 +74,6 @@ despawn_entity(World* world, Entity_Handle entity) {
     world->handles.pop_back();
 }
 
-Entity_Handle
-copy_entity(World* world, Entity_Handle entity) {
-    assert(is_alive(world, entity));
-    Entity_Handle copy = spawn_entity(world); // TODO(alexander): manage new entity manager later!
-    return copy;
-}
-
 /***************************************************************************
  * Component management
  ***************************************************************************/

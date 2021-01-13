@@ -21,7 +21,7 @@ uniform mat4 mvp_transform;
 void main() {
     frag_pos = vec3(model_transform * vec4(a_pos, 1.0f));
     texcoord = a_texcoord;
-    normal = normal_transform * a_normal;
+    normal = normalize(normal_transform * a_normal);
 
     gl_Position = mvp_transform * vec4(a_pos, 1.0f);
 }
@@ -98,11 +98,7 @@ vec3 calc_point_light(Point_Light light, vec3 view_dir) {
     float spec = pow(max(dot(view_dir, reflect_dir), 0.0f), material.shininess);
 
     float dist = length(light.position - frag_pos);
-    float denominator = light.constant;
-    denominator += light.linear*dist;
-    denominator += light.quadratic*dist;
-    // float attenuation = 1.0f/(light.linear*dist + light.quadratic*dist*dist);
-    float attenuation = 1.0f/denominator;
+    float attenuation = 1.0f/(light.constant + light.linear*dist + light.quadratic*dist*dist);
 
     vec3 ambient  =        light.ambient  * texture2D(material.diffuse,  texcoord).rgb;
     vec3 diffuse  = diff * light.diffuse  * texture2D(material.diffuse,  texcoord).rgb;

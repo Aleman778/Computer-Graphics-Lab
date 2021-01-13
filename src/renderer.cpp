@@ -81,61 +81,58 @@ apply_material(Renderer* renderer,
 
     // TODO(alexander): shoud maybe be separate from this function!!!
     // Prepare material, use shader and set global settings e.g. lighting information
-    // if (material.type != renderer->prev_material) {
-        switch (material.type) {
-            case Material_Type_Basic: {
-                const Basic_Shader* shader = material.Basic.shader;
-                glUseProgram(shader->program);
-                glUniform1f(shader->u_light_attenuation, renderer->light_attenuation);
-                glUniform1f(shader->u_light_intensity, renderer->light_intensity);
-            } break;
+    switch (material.type) {
+        case Material_Type_Basic: {
+            const Basic_Shader* shader = material.Basic.shader;
+            glUseProgram(shader->program);
+            glUniform1f(shader->u_light_attenuation, renderer->light_attenuation);
+            glUniform1f(shader->u_light_intensity, renderer->light_intensity);
+        } break;
         
-            case Material_Type_Phong: {
-                const Phong_Shader* shader = material.Phong.shader;
-                glUseProgram(shader->program);
+        case Material_Type_Phong: {
+            const Phong_Shader* shader = material.Phong.shader;
+            glUseProgram(shader->program);
 
-                glUniform3fv(shader->u_view_pos, 1, glm::value_ptr(renderer->view_pos));
+            glUniform3fv(shader->u_view_pos, 1, glm::value_ptr(renderer->view_pos));
 
-                {
-                    Directional_Light& l = renderer->directional_light;
-                    glUniform3fv(shader->directional_light.u_direction, 1, glm::value_ptr(l.direction));
-                    glUniform3fv(shader->directional_light.u_ambient,   1, glm::value_ptr(l.ambient));
-                    glUniform3fv(shader->directional_light.u_diffuse,   1, glm::value_ptr(l.diffuse));
-                    glUniform3fv(shader->directional_light.u_specular,  1, glm::value_ptr(l.specular));
-                }
+            {
+                Directional_Light& l = renderer->directional_light;
+                glUniform3fv(shader->directional_light.u_direction, 1, glm::value_ptr(l.direction));
+                glUniform3fv(shader->directional_light.u_ambient,   1, glm::value_ptr(l.ambient));
+                glUniform3fv(shader->directional_light.u_diffuse,   1, glm::value_ptr(l.diffuse));
+                glUniform3fv(shader->directional_light.u_specular,  1, glm::value_ptr(l.specular));
+            }
 
-                for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
-                    Point_Light& l = renderer->point_lights[i];
-                    glUniform3fv(shader->point_lights[i].u_position,  1, glm::value_ptr(l.position));
-                    glUniform1f (shader->point_lights[i].u_constant,                    l.constant);
-                    glUniform1f (shader->point_lights[i].u_linear,                      l.linear);
-                    glUniform1f (shader->point_lights[i].u_quadratic,                   l.quadratic);
-                    glUniform3fv(shader->point_lights[i].u_ambient,   1, glm::value_ptr(l.ambient));
-                    glUniform3fv(shader->point_lights[i].u_diffuse,   1, glm::value_ptr(l.diffuse));
-                    glUniform3fv(shader->point_lights[i].u_specular,  1, glm::value_ptr(l.specular));
-                }
+            for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+                Point_Light& l = renderer->point_lights[i];
+                glUniform3fv(shader->point_lights[i].u_position,  1, glm::value_ptr(l.position));
+                glUniform1f (shader->point_lights[i].u_constant,                    l.constant);
+                glUniform1f (shader->point_lights[i].u_linear,                      l.linear);
+                glUniform1f (shader->point_lights[i].u_quadratic,                   l.quadratic);
+                glUniform3fv(shader->point_lights[i].u_ambient,   1, glm::value_ptr(l.ambient));
+                glUniform3fv(shader->point_lights[i].u_diffuse,   1, glm::value_ptr(l.diffuse));
+                glUniform3fv(shader->point_lights[i].u_specular,  1, glm::value_ptr(l.specular));
+            }
 
-                glUniform3fv(shader->u_fog_color, 1, glm::value_ptr(renderer->fog_color));
-                glUniform1f(shader->u_fog_density, renderer->fog_density);
-                glUniform1f(shader->u_fog_gradient, renderer->fog_gradient);
-            } break;
+            glUniform3fv(shader->u_fog_color, 1, glm::value_ptr(renderer->fog_color));
+            glUniform1f(shader->u_fog_density, renderer->fog_density);
+            glUniform1f(shader->u_fog_gradient, renderer->fog_gradient);
+        } break;
 
-            case Material_Type_Sky: {
-                const Sky_Shader* shader = material.Sky.shader;
-                glUseProgram(shader->program);
-                glUniform3fv(shader->u_fog_color, 1, glm::value_ptr(renderer->fog_color));
-            } break;
-        }
-    // }
-    // renderer->prev_material = material.type;
+        case Material_Type_Sky: {
+            const Sky_Shader* shader = material.Sky.shader;
+            glUseProgram(shader->program);
+            glUniform3fv(shader->u_fog_color, 1, glm::value_ptr(renderer->fog_color));
+        } break;
+    }
 
     // Set material specific parameters
     switch (material.type) {
         case Material_Type_Basic: {
             const Basic_Material* basic = &material.Basic;
             glUniform4fv(basic->shader->u_color, 1, glm::value_ptr(basic->color));
-            
-            glm::mat4 mvp_transform = model_matrix * view_proj_matrix;
+
+            glm::mat4 mvp_transform = view_proj_matrix * model_matrix;
             glUniformMatrix4fv(basic->shader->u_mvp_transform, 1, GL_FALSE, glm::value_ptr(mvp_transform));
         } break;
 
