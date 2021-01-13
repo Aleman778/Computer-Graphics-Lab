@@ -15,12 +15,13 @@ out vec2 texcoord;
 out vec3 normal;
 
 uniform mat4 model_transform;
+uniform mat3 normal_transform;
 uniform mat4 mvp_transform;
 
 void main() {
     frag_pos = vec3(model_transform * vec4(a_pos, 1.0f));
     texcoord = a_texcoord;
-    normal = a_normal;
+    normal = normal_transform * a_normal;
 
     gl_Position = mvp_transform * vec4(a_pos, 1.0f);
 }
@@ -86,7 +87,7 @@ vec3 calc_directional_light(Directional_Light light, vec3 view_dir) {
     vec3 diffuse  = diff * light.diffuse  * texture2D(material.diffuse,  texcoord).rgb;
     vec3 specular = spec * light.specular * texture2D(material.specular, texcoord).rgb;
     
-    return ambient + diffuse + specular;
+    return (ambient + diffuse + specular) * material.color;
 }
 
 vec3 calc_point_light(Point_Light light, vec3 view_dir) {
@@ -111,7 +112,7 @@ vec3 calc_point_light(Point_Light light, vec3 view_dir) {
     diffuse *= attenuation;
     specular *= attenuation;
     
-    return (ambient + diffuse + specular);
+    return (ambient + diffuse + specular) * material.color;
 }
 
 void main() {

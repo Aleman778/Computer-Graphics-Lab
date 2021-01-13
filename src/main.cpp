@@ -314,6 +314,11 @@ main() {
             fps_counter = 0;
         }
 
+        
+        if (window.input.mouse_locked) {
+            glfwSetInputMode(glfw_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+        }
+
         bool should_render = false;
         while (update_timer >= target_frame_time) {
             switch (current_scene_type) {
@@ -367,6 +372,11 @@ main() {
                     glClear(GL_COLOR_BUFFER_BIT);
                 } break;
             }
+
+            static bool show_performance = true;
+            ImGui::Begin("Performance", &show_performance, ImVec2(280, 450), ImGuiWindowFlags_NoSavedSettings);
+            ImGui::Text("FPS: %u", fps);
+            ImGui::End();
 
             // Menu bar for switching between scenes
             if (ImGui::BeginMainMenuBar()) {

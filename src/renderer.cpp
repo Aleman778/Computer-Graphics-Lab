@@ -143,6 +143,9 @@ apply_material(Renderer* renderer,
             const Phong_Material* phong = &material.Phong;
             glUniformMatrix4fv(phong->shader->u_model_transform, 1, GL_FALSE, glm::value_ptr(model_matrix));
 
+            auto normal_matrix = glm::mat3(glm::transpose(glm::inverse(model_matrix)));
+            glUniformMatrix3fv(phong->shader->u_normal_transform, 1, GL_FALSE, glm::value_ptr(normal_matrix));
+
             glUniform3fv(phong->shader->u_color, 1, glm::value_ptr(phong->color));
 
             glActiveTexture(GL_TEXTURE0);
@@ -169,7 +172,7 @@ apply_material(Renderer* renderer,
             // Sky should not be moved by the camera!
             glm::mat4 vp_transform = glm::mat4(view_matrix);
             vp_transform[3].x = 0.0f;
-            vp_transform[3].y = 20.0f;
+            vp_transform[3].y = 10.0f;
             vp_transform[3].z = 0.0f;
             vp_transform = projection_matrix * vp_transform;
             glUniformMatrix4fv(sky->shader->u_vp_transform, 1, GL_FALSE, glm::value_ptr(vp_transform));
@@ -478,8 +481,9 @@ compile_phong_shader() {
     GLuint program = load_glsl_shader_from_file("phong.glsl");
     shader.program = program;
 
-    shader.u_model_transform = glGetUniformLocation(program, "model_transform");
-    shader.u_mvp_transform   = glGetUniformLocation(program, "mvp_transform");
+    shader.u_model_transform  = glGetUniformLocation(program, "model_transform");
+    shader.u_normal_transform = glGetUniformLocation(program, "normal_transform");
+    shader.u_mvp_transform    = glGetUniformLocation(program, "mvp_transform");
 
     shader.u_color     = glGetUniformLocation(program, "material.color");
     shader.u_diffuse   = glGetUniformLocation(program, "material.diffuse");
@@ -493,7 +497,7 @@ compile_phong_shader() {
     shader.u_view_pos = glGetUniformLocation(program, "view_pos");
 
     shader.directional_light.u_direction = glGetUniformLocation(program, "directional_light.direction");
-    shader.directional_light.u_ambient = glGetUniformLocation(program, "directional_light.direction");
+    shader.directional_light.u_ambient = glGetUniformLocation(program, "directional_light.ambient");
     shader.directional_light.u_diffuse = glGetUniformLocation(program, "directional_light.diffuse");
     shader.directional_light.u_specular = glGetUniformLocation(program, "directional_light.specular");
  

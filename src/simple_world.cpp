@@ -10,15 +10,7 @@ struct Simple_World_Scene {
     std::vector<System> rendering_pipeline;
     Entity_Handle player;
     Entity_Handle player_camera;
-    Entity_Handle test_sphere;
     f32 sensitivity;
-
-    Mesh mesh_cube;
-    Mesh mesh_terrain;
-    Mesh mesh_sphere;
-    Mesh mesh_sky;
-    Mesh mesh_cylinder;
-    Mesh mesh_cone;
 
     Phong_Shader phong_shader;
     Sky_Shader sky_shader;
@@ -28,6 +20,8 @@ struct Simple_World_Scene {
     Texture texture_snow_01_specular;
     Texture texture_snow_02_diffuse;
     Texture texture_snow_02_specular;
+    Texture texture_metal_diffuse;
+    Texture texture_metal_specular;
     Texture texture_sky;
 
     Height_Map terrain;
@@ -112,15 +106,63 @@ control_player(World* world,
     if (camera_rot) camera_rot->v = rot->v;
 }
 
+// NOTE(alexander): optimized entity for static meshes
+static Entity_Handle
+spawn_static_mesh_entity(World* world,
+                         const Material& material,
+                         const Mesh& mesh,
+                         Entity_Handle* parent_handle,
+                         glm::vec3 pos,
+                         glm::vec3 rot=glm::vec3(0.0f, 0.0f, 0.0f),
+                         glm::vec3 scl=glm::vec3(1.0f, 1.0f, 1.0f)) {
+    Entity_Handle entity = spawn_entity(world);
+
+    glm::quat rot_x(glm::vec3(0.0f, rot.x, 0.0f));
+    glm::quat rot_y(glm::vec3(rot.y, 0.0f, 0.0f));
+    glm::quat rot_z(glm::vec3(0.0f, 0.0f, rot.z));
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), pos);
+    glm::mat4 R = glm::toMat4(rot_z * rot_y * rot_x);
+    glm::mat4 S = glm::scale(glm::mat4(1.0f), scl);
+
+    if (parent_handle) {
+        add_component(world, entity, Local_To_World);
+        auto local_to_parent = add_component(world, entity, Local_To_Parent);
+        local_to_parent->m = T * R * S;
+    } else {
+        auto local_to_world = add_component(world, entity, Local_To_World);
+        local_to_world->m = T * R * S;
+    }
+
+    auto renderer = add_component(world, entity, Mesh_Renderer);
+    renderer->material = material;
+    renderer->mesh = mesh;
+
+    if (parent_handle) {
+        auto parent = add_component(world, entity, Parent);
+        parent->handle = *parent_handle;
+    }
+
+    return entity;
+}
+
 static bool
 initialize_scene(Simple_World_Scene* scene) {
     scene->phong_shader = compile_phong_shader();
     scene->sky_shader = compile_sky_shader();
 
+    // Create some basic meshes to build from
+    Mesh mesh_cube;
+    Mesh mesh_terrain;
+    Mesh mesh_sphere;
+    Mesh mesh_sky;
+    Mesh mesh_cylinder;
+    Mesh mesh_cone;
+    Mesh mesh_conical_frustum;
+
     {
         Mesh_Builder mb = {};
         push_cuboid_mesh(&mb, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
-        scene->mesh_cube = create_mesh_from_builder(&mb);
+        mesh_cube = create_mesh_from_builder(&mb);
     }
 
     {
@@ -129,34 +171,38 @@ initialize_scene(Simple_World_Scene* scene) {
         for (int i = 0; i < mb.vertices.size(); i++) {
             mb.vertices[i].texcoord *= 0.3f;
         }
-        scene->mesh_terrain = create_mesh_from_builder(&mb);
+        mesh_terrain = create_mesh_from_builder(&mb);
     }
 
     {
         Mesh_Builder mb = {};
         push_sphere(&mb, glm::vec3(0.0f), 1.0f);
-        scene->mesh_sphere = create_mesh_from_builder(&mb);
+        mesh_sphere = create_mesh_from_builder(&mb);
     }
 
     {
         Mesh_Builder mb = {};
         push_sphere(&mb, glm::vec3(0.0f), 100.0f);
-        scene->mesh_sky = create_mesh_from_builder(&mb);
-        scene->mesh_sky.is_two_sided = true; // since we are always inside the sky dome
+        mesh_sky = create_mesh_from_builder(&mb);
+        mesh_sky.is_two_sided = true; // since we are always inside the sky dome
     }
 
     {
         Mesh_Builder mb = {};
-        push_cylinder_triangle_strips(&mb, glm::vec3(0.0f), 0.5f, 2.0f);
-        scene->mesh_cylinder = create_mesh_from_builder(&mb);
-        scene->mesh_cylinder.mode = GL_TRIANGLE_STRIP;
+        push_cylinder_triangles(&mb, glm::vec3(0.0f), 0.5f, 1.0f);
+        mesh_cylinder = create_mesh_from_builder(&mb);
     }
 
     {
         Mesh_Builder mb = {};
-        push_cone_triangle_strips(&mb, glm::vec3(0.0f), 0.5f, 2.0f);
-        scene->mesh_cone = create_mesh_from_builder(&mb);
-        scene->mesh_cone.mode = GL_TRIANGLE_STRIP;
+        push_cone_triangles(&mb, glm::vec3(0.0f), 0.5f, 1.0f);
+        mesh_cone = create_mesh_from_builder(&mb);
+    }
+
+    {
+        Mesh_Builder mb = {};
+        push_conical_frustum_triangles(&mb, glm::vec3(0.0f), 0.5f, 0.25f, 1.0f);
+        mesh_conical_frustum = create_mesh_from_builder(&mb);
     }
 
     // Load textures
@@ -165,10 +211,12 @@ initialize_scene(Simple_World_Scene* scene) {
     scene->texture_snow_01_specular = load_texture_2d_from_file("snow_01_specular.png");
     scene->texture_snow_02_diffuse  = load_texture_2d_from_file("snow_02_diffuse.png");
     scene->texture_snow_02_specular = load_texture_2d_from_file("snow_02_specular.png");
+    scene->texture_metal_diffuse    = load_texture_2d_from_file("green_metal_rust_diffuse.png");
+    scene->texture_metal_specular   = load_texture_2d_from_file("green_metal_rust_specular.png");
     scene->texture_sky              = load_texture_2d_from_file("satara_night_no_lamps_2k.hdr");
     // scene->texture_sky        = load_texture_2d_from_file("winter_lake_01_1k.hdr");
 
-    // Setup random number generator for generating cuboid positions
+    // Setup random number generator
     std::random_device rd;
     std::mt19937 rng = std::mt19937(rd());
     std::uniform_real_distribution<f32> dist(0.0f, 100.0f);
@@ -187,6 +235,20 @@ initialize_scene(Simple_World_Scene* scene) {
     snow_material.Phong.diffuse = &scene->texture_snow_02_diffuse;
     snow_material.Phong.specular = &scene->texture_snow_02_specular;
 
+    Material metal_material = snow_material;
+    metal_material.Phong.diffuse = &scene->texture_metal_diffuse;
+    metal_material.Phong.specular = &scene->texture_metal_specular;
+    metal_material.Phong.shininess = 32.0f;
+
+    Material carrot_material = snow_material;
+    carrot_material.Phong.color = glm::vec3(1.0f, 0.5f, 0.1f);
+    carrot_material.Phong.diffuse = &scene->texture_default;
+    carrot_material.Phong.specular = &scene->texture_default;
+    carrot_material.Phong.shininess = 1.0f;
+
+    Material wood_material = carrot_material;
+    wood_material.Phong.color = glm::vec3(0.4f, 0.15f, 0.075f);
+
     // Setup the world
     World* world = &scene->world;
 
@@ -194,20 +256,10 @@ initialize_scene(Simple_World_Scene* scene) {
     world->renderer.fog_color = glm::vec4(0.01f, 0.01f, 0.01f, 1.0f);
     world->renderer.fog_density = 0.05f;
     world->renderer.fog_gradient = 2.0f;
-    world->renderer.point_lights[0].position  = glm::vec3(50.0f, 1.0f, 50.0f);
-    world->renderer.point_lights[0].constant  = 1.0f;
-    world->renderer.point_lights[0].linear    = 0.09f;
-    world->renderer.point_lights[0].quadratic = 0.032f;
-    world->renderer.point_lights[0].ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
-    world->renderer.point_lights[0].diffuse   = glm::vec3(0.6f, 0.6f, 0.6f);
-    world->renderer.point_lights[0].specular  = glm::vec3(0.5f, 0.5f, 0.5f);
-    world->renderer.point_lights[1].position  = glm::vec3(50.0f, 1.0f, 50.0f);
-    world->renderer.point_lights[1].constant  = 1.0f;
-    world->renderer.point_lights[1].linear    = 0.09f;
-    world->renderer.point_lights[1].quadratic = 0.032f;
-    world->renderer.point_lights[1].ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
-    world->renderer.point_lights[1].diffuse   = glm::vec3(0.6f, 0.6f, 0.6f);
-    world->renderer.point_lights[1].specular  = glm::vec3(0.5f, 0.5f, 0.5f);
+    world->renderer.directional_light.direction = glm::vec3(0.7f, -1.0f, 0.0f);
+    world->renderer.directional_light.ambient   = glm::vec3(0.003f, 0.003f, 0.005f);
+    world->renderer.directional_light.diffuse   = glm::vec3(0.03f, 0.03f, 0.05f);
+    world->renderer.directional_light.specular  = glm::vec3(0.02f, 0.02f, 0.04f);
     scene->enable_wireframe = false;
 
     // Player
@@ -231,126 +283,126 @@ initialize_scene(Simple_World_Scene* scene) {
     add_component(world, player_camera, Rotation);
     add_component(world, player_camera, Euler_Rotation);
 
-    Entity_Handle test_sphere = spawn_entity(world);
-    scene->test_sphere = test_sphere;
-    add_component(world, test_sphere, Local_To_World);
-    pos = add_component(world, test_sphere, Position);
-    pos->v = glm::vec3(50.0f, 1.0f, 50.0f);
-    add_component(world, test_sphere, Rotation);
-    add_component(world, test_sphere, Euler_Rotation);
-    auto renderer = add_component(world, test_sphere, Mesh_Renderer);
-    renderer->mesh = scene->mesh_sphere;
-    renderer->material = snow_material;
-
-    Entity_Handle sphere[10];
-    for (int i = 0; i < 10; i++) {
-        Entity_Handle child_test_sphere = spawn_entity(world);
-        sphere[i] = child_test_sphere;
-        add_component(world, child_test_sphere, Local_To_World);
-        add_component(world, child_test_sphere, Local_To_Parent);
-        pos = add_component(world, child_test_sphere, Position);
-        pos->v.x = 2.0f;
-        renderer = add_component(world, child_test_sphere, Mesh_Renderer);
-        renderer->mesh = scene->mesh_sphere;
-        renderer->material = snow_material;
-    }
-
-    for (int i = 9; i >= 1; i--) {
-        auto parent = add_component(world, sphere[i - 1], Parent);
-        parent->handle = sphere[i];
-    }
-    auto parent = add_component(world, sphere[9], Parent);
-    parent->handle = test_sphere;
-
-    // auto parent = add_component(world, sphere[0], Parent);
-    // parent->handle = test_sphere;
-    // for (int i = 0; i < 9; i++) {
-    //     auto parent = add_component(world, sphere[i + 1], Parent);
-    //     parent->handle = sphere[i];
-    // }
-
-
     Material sky_material = {};
     sky_material.type = Material_Type_Sky;
     sky_material.Sky.map = &scene->texture_sky;
     sky_material.Sky.shader = &scene->sky_shader;
-                                
+
     Entity_Handle sky = spawn_entity(world);
-    renderer = add_component(world, sky, Mesh_Renderer);
-    renderer->mesh = scene->mesh_sky;
+    auto renderer = add_component(world, sky, Mesh_Renderer);
+    renderer->mesh = mesh_sky;
     renderer->material = sky_material;
 
     Entity_Handle terrain = spawn_entity(world);
     renderer = add_component(world, terrain, Mesh_Renderer);
-    renderer->mesh = scene->mesh_terrain;
+    renderer->mesh = mesh_terrain;
     renderer->material = snow_ground_material;
 
-    // // Create a snowman
-    // Entity_Handle snowman_base = spawn_entity(world);
-    // {
-    //     set_name(world, snowman_base, "Snowman");
-    //     set_mesh(world, snowman_base, scene->mesh_sphere, snow_material);
+    Entity_Handle cube = spawn_entity(world);
+    add_component(world, cube, Local_To_World);
+    pos = add_component(world, cube, Position);
+    pos->v = glm::vec3(50.0f, 0.0f, 50.0f);
+    pos->v.y = sample_point_at(&scene->terrain, pos->v.x, pos->v.z) + 0.5f;
+    renderer = add_component(world, cube, Mesh_Renderer);
+    renderer->mesh = mesh_cube;
+    renderer->material = snow_ground_material;
 
-    //     Entity_Handle snowman_middle = spawn_entity(world);
-    //     set_name(world,   snowman_middle, "Snowman Middle");
-    //     set_parent(world, snowman_middle, snowman_base);
-    //     set_mesh(world,   snowman_middle, scene->mesh_sphere, snow_material);
-    //     translate(world,  snowman_middle, glm::vec3(0.0f, 1.3f, 0.0f));
-    //     scale(world,      snowman_middle, glm::vec3(0.7f));
+    // Create many snowmen
+    for (int i = 0; i < 30; i++) {
+        glm::vec3 p(dist(rng), 0.0f, dist(rng));
+        glm::vec3 scale(comp(rng)*0.8f + 0.2f);
+        p.y = sample_point_at(&scene->terrain, p.x, p.z) + scale.x;
+        auto snowman_base = spawn_static_mesh_entity(world, snow_material, mesh_sphere, NULL,
+                                                     p,
+                                                     glm::vec3(comp(rng)*two_pi, 0.0f, 0.0f),
+                                                     scale);
 
-    //     // Create simple solid color materials
-    //     Material carrot_material = snow_material;
-    //     carrot_material.Phong.diffuse_color = glm::vec3(1.0f, 0.5f, 0.1f);
-    //     carrot_material.Phong.diffuse_map = &scene->texture_default;
-    //     carrot_material.Phong.specular_map = &scene->texture_default;
-    //     carrot_material.Phong.shininess = 1.0f;
-    //     Material wood_material = carrot_material;
-    //     wood_material.Phong.diffuse_color = glm::vec3(0.4f, 0.15f, 0.075f);
+        auto snowman_middle = spawn_static_mesh_entity(world, snow_material, mesh_sphere, &snowman_base,
+                                                       glm::vec3(0.0f, 1.3f, 0.0f),
+                                                       glm::vec3(0.0f),
+                                                       glm::vec3(0.7f));
 
-    //     Entity_Handle snowman_arm_l = spawn_entity(world);
-    //     set_name(world,   snowman_arm_l, "Snowman Arm L");
-    //     set_parent(world, snowman_arm_l, snowman_middle);
-    //     set_mesh(world,   snowman_arm_l, scene->mesh_cylinder, wood_material);
-    //     translate(world,  snowman_arm_l, glm::vec3(-2.8f, -0.5f, 0.0f));
-    //     rotate(world,     snowman_arm_l, glm::vec3(0.0f, 0.0f, half_pi+0.2f));
-    //     scale(world,      snowman_arm_l, glm::vec3(0.3f, 1.0f, 0.3f));
+        auto snowman_head = spawn_static_mesh_entity(world, snow_material, mesh_sphere, &snowman_middle,
+                                                     glm::vec3(0.0f, 1.3f, 0.0f),
+                                                     glm::vec3(0.0f),
+                                                     glm::vec3(0.7f));
 
-    //     Entity_Handle snowman_arm_r = spawn_entity(world);
-    //     set_name(world,   snowman_arm_r, "Snowman Arm R");
-    //     set_parent(world, snowman_arm_r, snowman_middle);
-    //     set_mesh(world,   snowman_arm_r, scene->mesh_cylinder, wood_material);
-    //     translate(world,  snowman_arm_r, glm::vec3(0.8f, 0.0f, 0.0f));
-    //     rotate(world,     snowman_arm_r, glm::vec3(0.0f, 0.0f, half_pi-0.2f));
-    //     scale(world,      snowman_arm_r, glm::vec3(0.3f, 1.0f, 0.3f));
+        auto snowman_arm_l = spawn_static_mesh_entity(world, wood_material, mesh_cylinder, &snowman_middle,
+                                                      glm::vec3(-0.5f, 0.25f, 0.0f),
+                                                      glm::vec3(0.0f, 0.0f, half_pi+0.2f),
+                                                      glm::vec3(0.3f, 2.0f, 0.3f));
 
-    //     Entity_Handle snowman_head = spawn_entity(world);
-    //     set_name(world,   snowman_head, "Snowman Head");
-    //     set_parent(world, snowman_head, snowman_middle);
-    //     set_mesh(world,   snowman_head, scene->mesh_sphere, snow_material);
-    //     translate(world,  snowman_head, glm::vec3(0.0f, 1.3f, 0.0f));
-    //     scale(world,      snowman_head, glm::vec3(0.7f));
+        auto snowman_arm_r = spawn_static_mesh_entity(world, wood_material, mesh_cylinder, &snowman_middle,
+                                                      glm::vec3(2.5f, -0.12f, 0.0f),
+                                                      glm::vec3(0.0f, 0.0f, half_pi-0.2f),
+                                                      glm::vec3(0.3f, 2.0f, 0.3f));
 
-    //     Entity_Handle snowman_carrot = spawn_entity(world);
-    //     set_name(world,   snowman_carrot, "Snowman Carrot");
-    //     set_mesh(world,   snowman_carrot, scene->mesh_cone, carrot_material);
-    //     set_parent(world, snowman_carrot, snowman_head);
-    //     rotate(world,     snowman_carrot, glm::vec3(half_pi, 0.0f, 0.0f));
-    // }
+        auto snowman_carrot = spawn_static_mesh_entity(world, carrot_material, mesh_cone, &snowman_head,
+                                                       glm::vec3(0.0f),
+                                                       glm::vec3(0.0f, half_pi, 0.0f),
+                                                       glm::vec3(1.0f, 2.0f, 1.0f));
+    }
 
-    // // Create copies of the snowman
-    // for (int i = 0; i < 30; i++) {
-    //     Entity_Handle snowman_copy = copy_entity(world, snowman_base);
+    // Create lamp posts
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+        auto p = glm::vec3(50.0f + 20.0f*i, 0.0f, 45.0f);
+        p.y = sample_point_at(&scene->terrain, p.x, p.z) - 0.2f;
+        auto lamp_post_base = spawn_static_mesh_entity(world, metal_material, mesh_cylinder, NULL,
+                                                       p, glm::vec3(0.0f), glm::vec3(0.4f, 1.0f, 0.4f));
+        spawn_static_mesh_entity(world, metal_material, mesh_conical_frustum, &lamp_post_base,
+                                 glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f, 0.1f, 1.0f));
 
-    //     Transform tr = {};
-    //     f32 scale = comp(rng)*0.8f+0.2f;
-    //     glm::vec3 pos(dist(rng), 0.0f, dist(rng));
-    //     pos.y = sample_point_at(&scene->terrain, pos.x, pos.z) + 0.8f*scale;
-    //     tr.local_position = pos;
-    //     tr.local_scale = glm::vec3(scale);
-    //     tr.is_dirty = true;
-    //     update_transform(&tr);
-    //     set_local_transform(world, snowman_copy, tr.matrix);
-    // }
+        auto lamp_post_middle = spawn_static_mesh_entity(world, metal_material, mesh_cylinder, &lamp_post_base,
+                                                         glm::vec3(0.0f, 1.1f, 0.0f),
+                                                         glm::vec3(0.0f),
+                                                         glm::vec3(0.5f, 1.5f, 0.5f));
+
+        spawn_static_mesh_entity(world, metal_material, mesh_conical_frustum, &lamp_post_middle,
+                                 glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f, 0.05f, 1.0f));
+
+        auto lamp_post_top = spawn_static_mesh_entity(world, metal_material, mesh_cylinder, &lamp_post_middle,
+                                                      glm::vec3(0.0f, 1.05f, 0.0f),
+                                                      glm::vec3(0.0f),
+                                                      glm::vec3(0.5f, 1.5f, 0.5f));
+
+        auto lamp_post_head_base = spawn_static_mesh_entity(world, metal_material, mesh_cone, &lamp_post_top,
+                                                            glm::vec3(0.0f, 1.0f, 0.0f),
+                                                            glm::vec3(0.0f, -pi, 0.0f),
+                                                            glm::vec3(3.0f, 0.05f, 3.0f));
+
+        auto lamp_post_head_top = spawn_static_mesh_entity(world, metal_material, mesh_cone, &lamp_post_head_base,
+                                                           glm::vec3(0.0f, -4.0f, 0.0f),
+                                                           glm::vec3(0.0f, pi, 0.0f),
+                                                           glm::vec3(1.5f, 1.0f, 1.5f));
+
+        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+                                 glm::vec3(0.6f, -2.0f, 0.0f),
+                                 glm::vec3(0.0f, pi, 0.08f),
+                                 glm::vec3(0.1f, 8.0f, 0.4f));
+
+        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+                                 glm::vec3(-0.6f, -2.0f, 0.0f),
+                                 glm::vec3(0.0f, pi, -0.08f),
+                                 glm::vec3(0.1f, 8.0f, 0.4f));
+
+        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+                                 glm::vec3(0.0f, -2.0f, 0.6f),
+                                 glm::vec3(0.0f, pi-0.08f, 0.0f),
+                                 glm::vec3(0.4f, 8.0f, 0.1f));
+
+        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+                                 glm::vec3(0.0f, -2.0f, -0.6f),
+                                 glm::vec3(0.0f, pi+0.08f, 0.0f),
+                                 glm::vec3(0.4f, 8.0f, 0.1f));
+
+        world->renderer.point_lights[i].position  = glm::vec3(p.x, p.y + 3.0f, p.z);
+        world->renderer.point_lights[i].constant  = 1.0f;
+        world->renderer.point_lights[i].linear    = 0.14f;
+        world->renderer.point_lights[i].quadratic = 0.07f;
+        world->renderer.point_lights[i].ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
+        world->renderer.point_lights[i].diffuse   = glm::vec3(0.6f, 0.6f, 0.6f);
+        world->renderer.point_lights[i].specular  = glm::vec3(0.5f, 0.5f, 0.5f);
+    }
 
     // Setup main systems
     push_hierarchical_transform_systems(scene->main_systems);
@@ -391,9 +443,6 @@ update_scene(Simple_World_Scene* scene, Window* window, float dt) {
         camera->viewport = glm::vec4(0.0f, 0.0f, (f32) window->width, (f32) window->height);
     }
 
-    auto rot = get_component(&scene->world, scene->test_sphere, Euler_Rotation);
-    rot->v.x += 0.01f;
-
     // Update the world
     update_systems(&scene->world, scene->main_systems, dt);
 }
@@ -408,27 +457,44 @@ render_scene(Simple_World_Scene* scene, Window* window, float dt) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
+    World* world = &scene->world;
+
     // Render the world
-    auto camera = get_component(&scene->world, scene->player_camera, Camera);
-    begin_frame(scene->world.renderer.fog_color, camera->viewport, true);
-    update_systems(&scene->world, scene->rendering_pipeline, dt);
+    auto camera = get_component(world, scene->player_camera, Camera);
+    begin_frame(world->renderer.fog_color, camera->viewport, true);
+    update_systems(world, scene->rendering_pipeline, dt);
     end_frame();
 
     // ImGui
     ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 450), ImGuiWindowFlags_NoSavedSettings);
-    ImGui::Text("Point Light:");
-    ImGui::DragFloat3("Position",   &scene->world.renderer.point_lights[0].position.x);
-    ImGui::SliderFloat("Constant",  &scene->world.renderer.point_lights[0].constant, 0.0f, 2.0f);
-    ImGui::SliderFloat("Linear",    &scene->world.renderer.point_lights[0].linear, 0.0f, 2.0f);
-    ImGui::SliderFloat("Quadratic", &scene->world.renderer.point_lights[0].quadratic, 0.0f, 2.0f);
-    ImGui::ColorEdit3("Ambient",    &scene->world.renderer.point_lights[0].ambient.x);
-    ImGui::ColorEdit3("Diffuse",    &scene->world.renderer.point_lights[0].diffuse.x);
-    ImGui::ColorEdit3("Specular",   &scene->world.renderer.point_lights[0].specular.x);
+    ImGui::Text("Lighting:");
+    static int curr_light = 0;
+    static const char* light_names[] = {
+        "Directional Light",
+        "Point Light 1",
+        "Point Light 2",
+        "Point Light 3",
+        "Point Light 4"};
+    ImGui::Combo("", &curr_light, light_names, MAX_POINT_LIGHTS + 1);
+    if (curr_light == 0) {
+        ImGui::DragFloat3("Direction",  &world->renderer.directional_light.direction.x, 0.001f);
+        ImGui::ColorEdit3("Ambient",    &world->renderer.directional_light.ambient.x);
+        ImGui::ColorEdit3("Diffuse",    &world->renderer.directional_light.diffuse.x);
+        ImGui::ColorEdit3("Specular",   &world->renderer.directional_light.specular.x);
+    } else {
+        ImGui::DragFloat3("Position",   &world->renderer.point_lights[curr_light - 1].position.x);
+        ImGui::SliderFloat("Constant",  &world->renderer.point_lights[curr_light - 1].constant, 0.0f, 2.0f);
+        ImGui::SliderFloat("Linear",    &world->renderer.point_lights[curr_light - 1].linear, 0.0f, 2.0f);
+        ImGui::SliderFloat("Quadratic", &world->renderer.point_lights[curr_light - 1].quadratic, 0.0f, 2.0f);
+        ImGui::ColorEdit3("Ambient",    &world->renderer.point_lights[curr_light - 1].ambient.x);
+        ImGui::ColorEdit3("Diffuse",    &world->renderer.point_lights[curr_light - 1].diffuse.x);
+        ImGui::ColorEdit3("Specular",   &world->renderer.point_lights[curr_light - 1].specular.x);
+    }
 
     ImGui::Text("Fog:");
-    ImGui::ColorEdit3("Color", &scene->world.renderer.fog_color.x);
-    ImGui::SliderFloat("Density", &scene->world.renderer.fog_density, 0.01f, 0.5f);
-    ImGui::SliderFloat("Gradient", &scene->world.renderer.fog_gradient, 1.0f, 10.0f);
+    ImGui::ColorEdit3("Color", &world->renderer.fog_color.x);
+    ImGui::SliderFloat("Density", &world->renderer.fog_density, 0.01f, 0.5f);
+    ImGui::SliderFloat("Gradient", &world->renderer.fog_gradient, 1.0f, 10.0f);
 
     ImGui::Text("Miscellaneous:");
     ImGui::Checkbox("Wireframe mode", &scene->enable_wireframe);

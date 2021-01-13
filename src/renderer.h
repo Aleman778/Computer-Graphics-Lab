@@ -7,7 +7,7 @@ struct Mesh {
     GLuint  vao;
     GLsizei count;
     GLenum  mode; // e.g. GL_TRIANGLES
-    bool is_two_sided; // aka. disable culling?
+    bool is_two_sided; // aka. disable backface culling?
 };
 
 struct Height_Map {
@@ -45,6 +45,7 @@ struct Phong_Shader {
     GLint u_shininess;
 
     GLint u_model_transform;
+    GLint u_normal_transform;
     GLint u_mvp_transform;
 
     GLint u_fog_color; // usually same as clear color

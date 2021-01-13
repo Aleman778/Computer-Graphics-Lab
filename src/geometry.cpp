@@ -49,45 +49,45 @@ push_cuboid_mesh(Mesh_Builder* mb, glm::vec3 c, glm::vec3 d) {
 
     // Front
     push_quad(mb,
-              glm::vec3(c.x - d.x, c.y - d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f),
-              glm::vec3(c.x + d.x, c.y - d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f),
-              glm::vec3(c.x + d.x, c.y + d.y, c.z - d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f),
-              glm::vec3(c.x - d.x, c.y + d.y, c.z - d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+              glm::vec3(c.x + d.x, c.y - d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f),
+              glm::vec3(c.x - d.x, c.y - d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f),
+              glm::vec3(c.x - d.x, c.y + d.y, c.z - d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f),
+              glm::vec3(c.x + d.x, c.y + d.y, c.z - d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 
     // Back
     push_quad(mb,
-              glm::vec3(c.x - d.x, c.y - d.y, c.z + d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
-              glm::vec3(c.x - d.x, c.y + d.y, c.z + d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
-              glm::vec3(c.x + d.x, c.y + d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f),
-              glm::vec3(c.x + d.x, c.y - d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+              glm::vec3(c.x - d.x, c.y + d.y, c.z + d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
+              glm::vec3(c.x - d.x, c.y - d.y, c.z + d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
+              glm::vec3(c.x + d.x, c.y - d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f),
+              glm::vec3(c.x + d.x, c.y + d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
     // Left
     push_quad(mb,
-              glm::vec3(c.x - d.x, c.y - d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f),
-              glm::vec3(c.x - d.x, c.y + d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f),
-              glm::vec3(c.x - d.x, c.y + d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(-1.0f, 0.0f, 0.0f),
-              glm::vec3(c.x - d.x, c.y - d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+              glm::vec3(c.x - d.x, c.y + d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f),
+              glm::vec3(c.x - d.x, c.y - d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f),
+              glm::vec3(c.x - d.x, c.y - d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(-1.0f, 0.0f, 0.0f),
+              glm::vec3(c.x - d.x, c.y + d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
 
     // Right
     push_quad(mb,
-              glm::vec3(c.x + d.x, c.y - d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
-              glm::vec3(c.x + d.x, c.y - d.y, c.z + d.z), glm::vec2(1.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
-              glm::vec3(c.x + d.x, c.y + d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f),
-              glm::vec3(c.x + d.x, c.y + d.y, c.z - d.z), glm::vec2(0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+              glm::vec3(c.x + d.x, c.y - d.y, c.z + d.z), glm::vec2(0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+              glm::vec3(c.x + d.x, c.y - d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+              glm::vec3(c.x + d.x, c.y + d.y, c.z - d.z), glm::vec2(1.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+              glm::vec3(c.x + d.x, c.y + d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
     // Top
     push_quad(mb,
-              glm::vec3(c.x - d.x, c.y + d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-              glm::vec3(c.x + d.x, c.y + d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-              glm::vec3(c.x + d.x, c.y + d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-              glm::vec3(c.x - d.x, c.y + d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+              glm::vec3(c.x + d.x, c.y + d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+              glm::vec3(c.x - d.x, c.y + d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+              glm::vec3(c.x - d.x, c.y + d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+              glm::vec3(c.x + d.x, c.y + d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
     // Bottom
     push_quad(mb,
-              glm::vec3(c.x - d.x, c.y - d.y, c.z - d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
-              glm::vec3(c.x - d.x, c.y - d.y, c.z + d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
-              glm::vec3(c.x + d.x, c.y - d.y, c.z + d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f),
-              glm::vec3(c.x + d.x, c.y - d.y, c.z - d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+              glm::vec3(c.x - d.x, c.y - d.y, c.z + d.z), glm::vec2(0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+              glm::vec3(c.x - d.x, c.y - d.y, c.z - d.z), glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+              glm::vec3(c.x + d.x, c.y - d.y, c.z - d.z), glm::vec2(1.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+              glm::vec3(c.x + d.x, c.y - d.y, c.z + d.z), glm::vec2(0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 }
 
 void
@@ -121,28 +121,30 @@ push_sphere(Mesh_Builder* mb, glm::vec3 c, f32 r, int detail_x=16, int detail_y=
 }
 
 void
-push_circle_triangle_strips(Mesh_Builder* mb, glm::vec3 c, glm::vec3 n, f32 r, int detail=16, bool reverse=false) {
+push_circle_triangles(Mesh_Builder* mb, glm::vec3 c, glm::vec3 n, f32 r, int detail=16, bool reverse=false) {
     Vertex center_v = { c, glm::vec2(0.5f, 0.5f), n };
     u16 center_index = (u16) mb->vertices.size();
     mb->vertices.push_back(center_v);
 
     // build bottom circle
-    for (int i = 0; i < detail; i++) {
+    for (int i = 0; i <= detail; i++) {
         f32 angle = (reverse ? -1.0f : 1.0f) * two_pi * ((f32) i/ (f32) detail);
         glm::vec3 pos(c.x + cos(angle)*r, c.y, c.z + sin(angle)*r);
         Vertex v = { pos, glm::vec2(cos(angle), sin(angle)), n };
         mb->vertices.push_back(v);
-        mb->indices.push_back(center_index);
-        mb->indices.push_back(center_index + 1 + i);
+        if (i > 0) {
+            mb->indices.push_back(center_index);
+            mb->indices.push_back(center_index + 1 + i);
+            mb->indices.push_back(center_index + i);
+        }
     }
-    mb->indices.push_back(center_index + 1);
 }
 
 void
-push_cylinder_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int detail=16) {
-    glm::vec3 tc = glm::vec3(bc.x, bc.y - h, bc.z);
+push_cylinder_triangles(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int detail=16) {
+    glm::vec3 tc = glm::vec3(bc.x, bc.y + h, bc.z);
 
-    push_circle_triangle_strips(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail, true);
+    push_circle_triangles(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail, true);
     u16 base_index = (u16) mb->vertices.size();
 
     for (int i = 0; i <= detail; i++) {
@@ -158,32 +160,80 @@ push_cylinder_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int 
 
         Vertex tv = { top_pos, top_texcoord, normal };
         mb->vertices.push_back(tv);
-        mb->indices.push_back(base_index + i*2);
-        mb->indices.push_back(base_index + i*2 + 1);
+
+        if (i > 0) {
+            mb->indices.push_back(base_index + i*2 - 2);
+            mb->indices.push_back(base_index + i*2 - 1);
+            mb->indices.push_back(base_index + i*2);
+            
+
+            mb->indices.push_back(base_index + i*2 - 1);
+            mb->indices.push_back(base_index + i*2 + 1);
+            mb->indices.push_back(base_index + i*2);
+            
+        }
     }
 
-    mb->indices.push_back(base_index + 1);
-    push_circle_triangle_strips(mb, tc, glm::vec3(0.0f, 1.0f, 0.0f), r, detail);
+    push_circle_triangles(mb, tc, glm::vec3(0.0f, 1.0f, 0.0f), r, detail, false);
 }
 
 void
-push_cone_triangle_strips(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int detail=16) {
-    push_circle_triangle_strips(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail);
+push_cone_triangles(Mesh_Builder* mb, glm::vec3 bc, f32 r, f32 h, int detail=16) {
+    push_circle_triangles(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r, detail, true);
 
     u16 top_index = (u16) mb->vertices.size();
-    Vertex top_v = { glm::vec3(bc.x, bc.y + h, bc.z), glm::vec2(0.5f, 0.5f), glm::vec3(0.0f, 0.0f, 1.0f) };
+    Vertex top_v = { glm::vec3(bc.x, bc.y + h, bc.z), glm::vec2(0.5f, 0.5f), glm::vec3(0.0f, 1.0f, 0.0f) };
     mb->vertices.push_back(top_v);
 
-    for (int i = 0; i < detail; i++) {
+    for (int i = 0; i <= detail; i++) {
         f32 angle = two_pi * ((f32) i/ (f32) detail);
         glm::vec3 pos(bc.x + cos(angle)*r, bc.y, bc.z + sin(angle)*r);
         glm::vec3 normal(pos.x*h/r, r/h, pos.z*h/r);
         normal = glm::normalize(normal);
         Vertex v = { pos, glm::vec2(cos(angle), sin(angle)), normal };
         mb->vertices.push_back(v);
-        mb->indices.push_back(top_index);
-        mb->indices.push_back(top_index + i + 1);
+
+        if (i > 0) {
+            mb->indices.push_back(top_index);
+            mb->indices.push_back(top_index + i + 1);
+            mb->indices.push_back(top_index + i);
+        }
     }
+}
+
+void
+push_conical_frustum_triangles(Mesh_Builder* mb, glm::vec3 bc, f32 r1, f32 r2, f32 h, int detail=16) {
+    glm::vec3 tc = glm::vec3(bc.x, bc.y + h, bc.z);
+    push_circle_triangles(mb, bc, glm::vec3(0.0f, -1.0f, 0.0f), r1, detail, true);
+
+    u16 base_index = (u16) mb->vertices.size();
+    for (int i = 0; i <= detail; i++) {
+        f32 angle = two_pi * ((f32) i/ (f32) detail);
+        glm::vec3 pos(bc.x + cos(angle)*r1, bc.y, bc.z + sin(angle)*r1);
+        glm::vec3 normal(pos.x*h/r1, r1/h, pos.z*h/r1);
+        normal = glm::normalize(normal);
+        Vertex bv = { pos, glm::vec2(cos(angle), sin(angle)), normal };
+        mb->vertices.push_back(bv);
+        
+        pos = glm::vec3(bc.x + cos(angle)*r2, bc.y + h, bc.z + sin(angle)*r2);
+        normal = glm::vec3 (pos.x*h/r2, r2/h, pos.z*h/r2);
+        normal = glm::normalize(normal);
+        Vertex tv = { pos, glm::vec2(cos(angle), sin(angle)), normal };
+        mb->vertices.push_back(tv);
+
+        if (i > 0) {
+            mb->indices.push_back(base_index + i*2 - 2);
+            mb->indices.push_back(base_index + i*2 - 1);
+            mb->indices.push_back(base_index + i*2);
+            
+
+            mb->indices.push_back(base_index + i*2 - 1);
+            mb->indices.push_back(base_index + i*2 + 1);
+            mb->indices.push_back(base_index + i*2);
+        }
+    }
+    
+    push_circle_triangles(mb, tc, glm::vec3(0.0f, -1.0f, 0.0f), r2, detail, false);
 }
 
 void
