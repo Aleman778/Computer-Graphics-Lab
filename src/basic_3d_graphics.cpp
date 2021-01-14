@@ -136,7 +136,7 @@ update_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
 void
 render_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
     auto camera = get_component(&scene->world, scene->camera, Camera);
-    begin_frame(primary_bg_color, camera->viewport, true);
+    begin_frame(primary_bg_color, camera->viewport, true, &scene->world.renderer);
     update_systems(&scene->world, scene->rendering_pipeline, dt);
     end_frame();
 

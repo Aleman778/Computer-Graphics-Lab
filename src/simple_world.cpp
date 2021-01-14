@@ -457,7 +457,7 @@ render_scene(Simple_World_Scene* scene, Window* window, float dt) {
 
     // Render the world
     auto camera = get_component(world, scene->player_camera, Camera);
-    begin_frame(world->renderer.fog_color, camera->viewport, true);
+    begin_frame(world->renderer.fog_color, camera->viewport, true, &scene->world.renderer);
     update_systems(world, scene->rendering_pipeline, dt);
     end_frame();
 

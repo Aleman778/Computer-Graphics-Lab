@@ -174,7 +174,8 @@ struct Renderer {
 
 void begin_frame(const glm::vec4& clear_color,
                  const glm::vec4& viewport,
-                 bool depth_testing=false);
+                 bool depth_testing=false,
+                 Renderer* renderer=NULL);
 
 void apply_material(Renderer* renderer,
                     const Material& material,
