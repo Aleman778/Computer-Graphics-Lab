@@ -231,7 +231,7 @@ render_scene(Koch_Snowflake_Scene* scene, Window* window, f32 dt) {
     glUseProgram(0);
 
     // ImGui
-    ImGui::Begin("Lab 1 - Koch Snowflake", &scene->show_gui, ImVec2(300, 220), ImGuiWindowFlags_NoSavedSettings);
+    ImGui::Begin("Lab 1 - Koch Snowflake", &scene->show_gui);
     ImGui::SliderInt("Recursion Depth", &scene->recursion_depth, 1, max_recursion_depth);
     ImGui::Text("Fill Vertex Count: %zd", scene->fill_count[scene->recursion_depth - 1]);
     ImGui::Text("Outline Vertex Count: %zd", scene->outline_count[scene->recursion_depth - 1]);

@@ -21,13 +21,17 @@ TARGET_INCLUDE_DIRECTORIES(nanovg PUBLIC nanovg/src)
 SET_TARGET_PROPERTIES(nanovg PROPERTIES FOLDER "vendor/nanovg")
 
 ADD_LIBRARY(imgui STATIC imgui/imgui.cpp imgui/imgui_demo.cpp imgui/imgui_draw.cpp 
-			imgui/imgui.h imgui/imgui_internal.h 
+			imgui/imgui.h imgui/imgui_internal.h
+                        imgui/imgui_widgets.cpp
+                        imgui/imgui_guizmo.h imgui/imgui_guizmo.cpp
 			imgui/stb_rect_pack.h imgui/stb_textedit.h imgui/stb_truetype.h 
-			imgui/examples/opengl3_example/imgui_impl_glfw_gl3.h
-			imgui/examples/opengl3_example/imgui_impl_glfw_gl3.cpp)
+			imgui/examples/imgui_impl_opengl3.h
+			imgui/examples/imgui_impl_opengl3.cpp
+			imgui/examples/imgui_impl_glfw.h
+			imgui/examples/imgui_impl_glfw.cpp)
 
 TARGET_LINK_LIBRARIES(imgui PUBLIC vendor)
-TARGET_INCLUDE_DIRECTORIES(imgui PUBLIC imgui imgui/examples/opengl3_example)
+TARGET_INCLUDE_DIRECTORIES(imgui PUBLIC imgui imgui/examples)
 SET_TARGET_PROPERTIES(imgui PROPERTIES FOLDER "vendor/imgui")
 
 TARGET_LINK_LIBRARIES(vendor INTERFACE imgui nanovg)

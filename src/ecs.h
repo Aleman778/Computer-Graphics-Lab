@@ -50,6 +50,10 @@ struct Parent {
     Entity_Handle handle;
 };
 
+struct Child {
+    Entity_Handle handle;
+};
+
 struct Position {
     glm::vec3 v;
 };
@@ -79,6 +83,7 @@ struct Camera {
     glm::mat4 view;
     glm::mat4 view_proj;
     glm::vec4 viewport;
+    Window* window; // target output (optional)
     bool is_orthographic; // perspective (false), orthographic (true)
 };
 
@@ -87,15 +92,21 @@ struct Mesh_Renderer {
     Material material;
 };
 
+struct Debug_Name {
+    std::string s;
+};
+
 REGISTER_COMPONENT(Local_To_World);
 REGISTER_COMPONENT(Local_To_Parent);
 REGISTER_COMPONENT(Parent);
+REGISTER_COMPONENT(Child);
 REGISTER_COMPONENT(Position);
 REGISTER_COMPONENT(Euler_Rotation);
 REGISTER_COMPONENT(Rotation);
 REGISTER_COMPONENT(Scale);
 REGISTER_COMPONENT(Camera);
 REGISTER_COMPONENT(Mesh_Renderer);
+REGISTER_COMPONENT(Debug_Name);
 
 /**
  * Handle to a particular instance of a component.
@@ -161,9 +172,9 @@ Entity_Handle spawn_entity(World* world);
 void despawn_entity(World* world, Entity_Handle entity);
 Entity_Handle copy_entity(World* world, Entity_Handle entity);
 
-void* _add_component(World* world, Entity_Handle handle, u32 id, usize size);
-bool _remove_component(World* world, Entity_Handle handle, u32 id, usize size);
-void* _get_component(World* world, Entity_Handle handle, u32 id, usize size);
+void* _add_component(World* world, Entity* handle, u32 id, usize size);
+bool _remove_component(World* world, Entity* handle, u32 id, usize size);
+void* _get_component(World* world, Entity* handle, u32 id, usize size);
 void _use_component(System& system, u32 id, u32 size, u32 flags=0);
 void push_system(std::vector<System>& systems, System system);
 void update_systems(const std::vector<System>& systems, f32 dt);

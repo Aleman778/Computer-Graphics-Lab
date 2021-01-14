@@ -8,6 +8,7 @@
 #include "triangulation.cpp"     // Lab 2
 #include "basic_3d_graphics.cpp" // Lab 3
 #include "simple_world.cpp"      // Lab 4
+#include "world_editor.cpp"      // Lab 4
 
 bool
 was_pressed(Button_State* state) {
@@ -110,8 +111,7 @@ window_key_callback(GLFWwindow* glfw_window, int key, int scancode, int action, 
 
 static void
 window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods) {
-    if (ImGui::IsMouseHoveringAnyWindow()) {
-        ImGui_ImplGlfwGL3_MouseButtonCallback(glfw_window, button, action, mods);
+    if (ImGui::IsAnyWindowHovered()) {
         return;
     }
 
@@ -138,10 +138,10 @@ window_mouse_callback(GLFWwindow* glfw_window, int button, int action, int mods)
 
 static void
 window_scroll_callback(GLFWwindow* glfw_window, double xoffset, double yoffset) {
-    if (ImGui::IsMouseHoveringAnyWindow()) {
-        ImGui_ImplGlfwGL3_ScrollCallback(glfw_window, xoffset, yoffset);
+    if (ImGui::IsAnyWindowHovered()) {
         return;
     }
+
     Window* window = (Window*) glfwGetWindowUserPointer(glfw_window);
     if (window) {
         window->input.mouse_scroll_x = (f32) xoffset;
@@ -211,6 +211,24 @@ main() {
         return -1;
     }
 
+    
+#ifdef __APPLE__
+    // GL 3.2 + GLSL 150
+    const char* glsl_version = "#version 150";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+#else
+    // GL 3.0 + GLSL 130
+    const char* glsl_version = "#version 130";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+    //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+#endif
+
+
     // Setup time
     global_time_epoch = std::chrono::high_resolution_clock::now();
 
@@ -271,11 +289,14 @@ main() {
     auto triangulation_scene = new Triangulation_Scene();
     auto basic_3d_graphics_scene = new Basic_3D_Graphics_Scene();
     auto simple_world_scene = new Simple_World_Scene();
+    auto world_editor = new World_Editor();
+    world_editor->world = &simple_world_scene->world;
     Scene_Type current_scene_type = Scene_Simple_World;
 
     // Setup ImGui
     ImGui::CreateContext();
-    ImGui_ImplGlfwGL3_Init(glfw_window, false);
+    ImGui_ImplGlfw_InitForOpenGL(glfw_window, true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
     ImGuiIO& io = ImGui::GetIO();
     std::ostringstream path_stream;
     path_stream << res_folder;
@@ -331,11 +352,28 @@ main() {
                 } break;
 
                 case Scene_Basic_3D_Graphics: {
-                    update_scene(basic_3d_graphics_scene, &window, target_frame_time);
+                    if (!basic_3d_graphics_scene->is_initialized) {
+                        if (!initialize_scene(basic_3d_graphics_scene, &window)) {
+                            is_running = false;
+                            return 1;
+                        }
+                    }
+
+                    update_systems(&basic_3d_graphics_scene->world, basic_3d_graphics_scene->main_systems, target_frame_time);
                 } break;
 
                 case Scene_Simple_World: {
-                    update_scene(simple_world_scene, &window, target_frame_time);
+                    if (!simple_world_scene->is_initialized) {
+                        if (!initialize_scene(simple_world_scene, &window)) {
+                            is_running = false;
+                            return 1;
+                        }
+                    }
+                    update_systems(&simple_world_scene->world, simple_world_scene->main_systems, target_frame_time);
+                } break;
+
+                case Scene_World_Editor: {
+                    update_world_editor(world_editor, &window, target_frame_time);
                 } break;
             }
 
@@ -346,7 +384,10 @@ main() {
 
         // Render
         if (should_render) {
-            ImGui_ImplGlfwGL3_NewFrame();
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+            ImGuizmo::BeginFrame();
 
             // Render current scene
             switch (current_scene_type) {
@@ -366,6 +407,10 @@ main() {
                     render_scene(simple_world_scene, &window, target_frame_time);
                 } break;
 
+                case Scene_World_Editor: {
+                    render_world_editor(world_editor, &window, target_frame_time);
+                } break;
+
                 default: {
                     // NOTE(alexander): invalid scene, just render background
                     glClearColor(primary_bg_color.x, primary_bg_color.y, primary_bg_color.z, primary_bg_color.w);
@@ -374,7 +419,7 @@ main() {
             }
 
             static bool show_performance = true;
-            ImGui::Begin("Performance", &show_performance, ImVec2(280, 450), ImGuiWindowFlags_NoSavedSettings);
+            ImGui::Begin("Performance", &show_performance);
             ImGui::Text("FPS: %u", fps);
             ImGui::End();
 
@@ -386,6 +431,7 @@ main() {
                     if (ImGui::MenuItem("Lab 2 - Triangulation")) current_scene_type = Scene_Triangulation;
                     if (ImGui::MenuItem("Lab 3 - Basic 3D Graphics")) current_scene_type = Scene_Basic_3D_Graphics;
                     if (ImGui::MenuItem("Lab 4 - Simple World")) current_scene_type = Scene_Simple_World;
+                    if (ImGui::MenuItem("Lab 4 - World Editor")) current_scene_type = Scene_World_Editor;
                     ImGui::EndMenu();
                 }
 
@@ -394,6 +440,9 @@ main() {
 
             if (!window.input.mouse_locked) {
                 ImGui::Render();
+                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            } else {
+                ImGui::EndFrame();
             }
 
             // Reset input state
@@ -438,8 +487,11 @@ main() {
         }
     }
 
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
     glfwDestroyWindow(glfw_window);
-    ImGui_ImplGlfwGL3_Shutdown();
     glfwTerminate();
     return 0;
 }

@@ -111,6 +111,7 @@ DEF_SYSTEM(player_controller_system) {
 // NOTE(alexander): optimized entity for static meshes
 static Entity_Handle
 spawn_static_mesh_entity(World* world,
+                         const char* name,
                          const Material& material,
                          const Mesh& mesh,
                          Entity_Handle* parent_handle,
@@ -118,6 +119,9 @@ spawn_static_mesh_entity(World* world,
                          glm::vec3 rot=glm::vec3(0.0f, 0.0f, 0.0f),
                          glm::vec3 scl=glm::vec3(1.0f, 1.0f, 1.0f)) {
     Entity_Handle entity = spawn_entity(world);
+
+    auto name_component = add_component(world, entity, Debug_Name);
+    name_component->s = std::string(name);
 
     glm::quat rot_x(glm::vec3(0.0f, rot.x, 0.0f));
     glm::quat rot_y(glm::vec3(rot.y, 0.0f, 0.0f));
@@ -142,6 +146,8 @@ spawn_static_mesh_entity(World* world,
     if (parent_handle) {
         auto parent = add_component(world, entity, Parent);
         parent->handle = *parent_handle;
+        auto child = add_component(world, *parent_handle, Child);
+        child->handle = entity;
     }
 
     return entity;
@@ -225,6 +231,11 @@ initialize_scene(Simple_World_Scene* scene, Window* window) {
     std::uniform_real_distribution<f32> comp(0.0f, 1.0f);
 
     // Setup some reusable materials
+    Material sky_material = {};
+    sky_material.type = Material_Type_Sky;
+    sky_material.Sky.map = &scene->texture_sky;
+    sky_material.Sky.shader = &scene->sky_shader;
+
     Material snow_ground_material = {};
     snow_ground_material.type = Material_Type_Phong;
     snow_ground_material.Phong.color = glm::vec3(1.0f);
@@ -266,18 +277,23 @@ initialize_scene(Simple_World_Scene* scene, Window* window) {
 
     // Player Camera
     Entity_Handle player_camera = spawn_entity(world);
+    auto name = add_component(world, player_camera, Debug_Name);
+    name->s = std::string("Main Camera");
     scene->player_camera = player_camera;
     auto camera = add_component(world, player_camera, Camera);
     camera->fov = half_pi;
     camera->near = 0.01f;
     camera->far = 100000.0f;
     camera->is_orthographic = false;
+    camera->window = window;
     add_component(world, player_camera, Position);
     add_component(world, player_camera, Rotation);
     add_component(world, player_camera, Euler_Rotation);
 
     // Player
     Entity_Handle player = spawn_entity(world);
+    name = add_component(world, player, Debug_Name);
+    name->s = std::string("Player");
     scene->player = player;
     auto pc = add_component(world, player, Player_Controller);
     pc->camera = player_camera;
@@ -290,17 +306,16 @@ initialize_scene(Simple_World_Scene* scene, Window* window) {
     add_component(world, player, Rotation);
     add_component(world, player, Euler_Rotation);
 
-    Material sky_material = {};
-    sky_material.type = Material_Type_Sky;
-    sky_material.Sky.map = &scene->texture_sky;
-    sky_material.Sky.shader = &scene->sky_shader;
-
     Entity_Handle sky = spawn_entity(world);
+    name = add_component(world, sky, Debug_Name);
+    name->s = std::string("Sky");
     auto renderer = add_component(world, sky, Mesh_Renderer);
     renderer->mesh = mesh_sky;
     renderer->material = sky_material;
 
     Entity_Handle terrain = spawn_entity(world);
+    name = add_component(world, terrain, Debug_Name);
+    name->s = std::string("Terrain");
     renderer = add_component(world, terrain, Mesh_Renderer);
     renderer->mesh = mesh_terrain;
     renderer->material = snow_ground_material;
@@ -310,32 +325,37 @@ initialize_scene(Simple_World_Scene* scene, Window* window) {
         glm::vec3 p(dist(rng), 0.0f, dist(rng));
         glm::vec3 scale(comp(rng)*0.8f + 0.2f);
         p.y = sample_point_at(&scene->terrain, p.x, p.z) + scale.x;
-        auto snowman_base = spawn_static_mesh_entity(world, snow_material, mesh_sphere, NULL,
+        auto snowman_base = spawn_static_mesh_entity(world, "Snowman", snow_material, mesh_sphere, NULL,
                                                      p,
                                                      glm::vec3(comp(rng)*two_pi, 0.0f, 0.0f),
                                                      scale);
 
-        auto snowman_middle = spawn_static_mesh_entity(world, snow_material, mesh_sphere, &snowman_base,
+        auto snowman_middle = spawn_static_mesh_entity(world, "Snowman Middle",
+                                                       snow_material, mesh_sphere, &snowman_base,
                                                        glm::vec3(0.0f, 1.3f, 0.0f),
                                                        glm::vec3(0.0f),
                                                        glm::vec3(0.7f));
 
-        auto snowman_head = spawn_static_mesh_entity(world, snow_material, mesh_sphere, &snowman_middle,
+        auto snowman_head = spawn_static_mesh_entity(world, "Snowman Head",
+                                                     snow_material, mesh_sphere, &snowman_middle,
                                                      glm::vec3(0.0f, 1.3f, 0.0f),
                                                      glm::vec3(0.0f),
                                                      glm::vec3(0.7f));
 
-        auto snowman_arm_l = spawn_static_mesh_entity(world, wood_material, mesh_cylinder, &snowman_middle,
+        auto snowman_arm_l = spawn_static_mesh_entity(world, "Snowman Arm L",
+                                                      wood_material, mesh_cylinder, &snowman_middle,
                                                       glm::vec3(-0.5f, 0.25f, 0.0f),
                                                       glm::vec3(0.0f, 0.0f, half_pi+0.2f),
                                                       glm::vec3(0.3f, 2.0f, 0.3f));
 
-        auto snowman_arm_r = spawn_static_mesh_entity(world, wood_material, mesh_cylinder, &snowman_middle,
+        auto snowman_arm_r = spawn_static_mesh_entity(world, "Snowman Arm R",
+                                                      wood_material, mesh_cylinder, &snowman_middle,
                                                       glm::vec3(2.5f, -0.12f, 0.0f),
                                                       glm::vec3(0.0f, 0.0f, half_pi-0.2f),
                                                       glm::vec3(0.3f, 2.0f, 0.3f));
 
-        auto snowman_carrot = spawn_static_mesh_entity(world, carrot_material, mesh_cone, &snowman_head,
+        auto snowman_carrot = spawn_static_mesh_entity(world, "Snowman Carrot",
+                                                       carrot_material, mesh_cone, &snowman_head,
                                                        glm::vec3(0.0f),
                                                        glm::vec3(0.0f, half_pi, 0.0f),
                                                        glm::vec3(1.0f, 2.0f, 1.0f));
@@ -345,50 +365,61 @@ initialize_scene(Simple_World_Scene* scene, Window* window) {
     for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
         auto p = glm::vec3(50.0f + 20.0f*i, 0.0f, 45.0f);
         p.y = sample_point_at(&scene->terrain, p.x, p.z) - 0.2f;
-        auto lamp_post_base = spawn_static_mesh_entity(world, metal_material, mesh_cylinder, NULL,
+        auto lamp_post_base = spawn_static_mesh_entity(world, "Lamp Post",
+                                                       metal_material, mesh_cylinder, NULL,
                                                        p, glm::vec3(0.0f), glm::vec3(0.4f, 1.0f, 0.4f));
-        spawn_static_mesh_entity(world, metal_material, mesh_conical_frustum, &lamp_post_base,
+        spawn_static_mesh_entity(world, "Lamp Post Transition 1", metal_material,
+                                 mesh_conical_frustum, &lamp_post_base,
                                  glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f, 0.1f, 1.0f));
 
-        auto lamp_post_middle = spawn_static_mesh_entity(world, metal_material, mesh_cylinder, &lamp_post_base,
+        auto lamp_post_middle = spawn_static_mesh_entity(world, "Lamp Post Middle",
+                                                         metal_material, mesh_cylinder, &lamp_post_base,
                                                          glm::vec3(0.0f, 1.1f, 0.0f),
                                                          glm::vec3(0.0f),
                                                          glm::vec3(0.5f, 1.5f, 0.5f));
 
-        spawn_static_mesh_entity(world, metal_material, mesh_conical_frustum, &lamp_post_middle,
+        spawn_static_mesh_entity(world, "Lamp Post Transition 2", metal_material,
+                                 mesh_conical_frustum, &lamp_post_middle,
                                  glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f, 0.05f, 1.0f));
 
-        auto lamp_post_top = spawn_static_mesh_entity(world, metal_material, mesh_cylinder, &lamp_post_middle,
+        auto lamp_post_top = spawn_static_mesh_entity(world, "Lamp Post Top",
+                                                      metal_material, mesh_cylinder, &lamp_post_middle,
                                                       glm::vec3(0.0f, 1.05f, 0.0f),
                                                       glm::vec3(0.0f),
                                                       glm::vec3(0.5f, 1.5f, 0.5f));
 
-        auto lamp_post_head_base = spawn_static_mesh_entity(world, metal_material, mesh_cone, &lamp_post_top,
+        auto lamp_post_head_base = spawn_static_mesh_entity(world, "Lamp Post Head Base",
+                                                            metal_material, mesh_cone, &lamp_post_top,
                                                             glm::vec3(0.0f, 1.0f, 0.0f),
                                                             glm::vec3(0.0f, -pi, 0.0f),
                                                             glm::vec3(3.0f, 0.05f, 3.0f));
 
-        auto lamp_post_head_top = spawn_static_mesh_entity(world, metal_material, mesh_cone, &lamp_post_head_base,
+        auto lamp_post_head_top = spawn_static_mesh_entity(world, "Lamp Post Head Top",
+                                                           metal_material, mesh_cone, &lamp_post_head_base,
                                                            glm::vec3(0.0f, -4.0f, 0.0f),
                                                            glm::vec3(0.0f, pi, 0.0f),
                                                            glm::vec3(1.5f, 1.0f, 1.5f));
 
-        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+        spawn_static_mesh_entity(world, "Lamp Post Head Side 1",
+                                 metal_material, mesh_cube, &lamp_post_head_base,
                                  glm::vec3(0.6f, -2.0f, 0.0f),
                                  glm::vec3(0.0f, pi, 0.08f),
                                  glm::vec3(0.1f, 8.0f, 0.4f));
 
-        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+        spawn_static_mesh_entity(world, "Lamp Post Head Side 2",
+                                 metal_material, mesh_cube, &lamp_post_head_base,
                                  glm::vec3(-0.6f, -2.0f, 0.0f),
                                  glm::vec3(0.0f, pi, -0.08f),
                                  glm::vec3(0.1f, 8.0f, 0.4f));
 
-        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+        spawn_static_mesh_entity(world, "Lamp Post Head Side 3",
+                                 metal_material, mesh_cube, &lamp_post_head_base,
                                  glm::vec3(0.0f, -2.0f, 0.6f),
                                  glm::vec3(0.0f, pi-0.08f, 0.0f),
                                  glm::vec3(0.4f, 8.0f, 0.1f));
 
-        spawn_static_mesh_entity(world, metal_material, mesh_cube, &lamp_post_head_base,
+        spawn_static_mesh_entity(world, "Lamp Post Head Side 4",
+                                 metal_material, mesh_cube, &lamp_post_head_base,
                                  glm::vec3(0.0f, -2.0f, -0.6f),
                                  glm::vec3(0.0f, pi+0.08f, 0.0f),
                                  glm::vec3(0.4f, 8.0f, 0.1f));
@@ -422,28 +453,6 @@ initialize_scene(Simple_World_Scene* scene, Window* window) {
 }
 
 void
-update_scene(Simple_World_Scene* scene, Window* window, float dt) {
-    if (!scene->is_initialized) {
-        if (!initialize_scene(scene, window)) {
-            is_running = false;
-            return;
-        }
-    }
-
-    // Make the players camera fit the entire window
-    auto camera = get_component(&scene->world, scene->player_camera, Camera);
-    if (camera) {
-        if (window->width != 0 && window->height != 0) {
-            camera->aspect = ((f32) window->width)/((f32) window->height);
-        }
-        camera->viewport = glm::vec4(0.0f, 0.0f, (f32) window->width, (f32) window->height);
-    }
-
-    // Update the world
-    update_systems(&scene->world, scene->main_systems, dt);
-}
-
-void
 render_scene(Simple_World_Scene* scene, Window* window, float dt) {
     // Use wireframe if enabled
     if (scene->enable_wireframe) {
@@ -462,7 +471,7 @@ render_scene(Simple_World_Scene* scene, Window* window, float dt) {
     end_frame();
 
     // ImGui
-    ImGui::Begin("Lab 4 - Simple World", &scene->show_gui, ImVec2(280, 450), ImGuiWindowFlags_NoSavedSettings);
+    ImGui::Begin("Lab 4 - Simple World", &scene->show_gui);
     ImGui::Text("Lighting:");
     static int curr_light = 0;
     static const char* light_names[] = {

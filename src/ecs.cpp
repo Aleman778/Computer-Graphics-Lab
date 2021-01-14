@@ -362,7 +362,7 @@ DEF_SYSTEM(hierarchical_local_to_world_system) {
     auto local_to_world = (Local_To_World*) components[1];
     auto local_to_parent = (Local_To_Parent*) components[2];
 
-    usize test = (usize) (((u8*) parent) - &world->components[Parent_ID][0]);
+    // usize test = (usize) (((u8*) parent) - &world->components[Parent_ID][0]);
     auto parent_local_to_world = get_component(world, parent->handle, Local_To_World);
     local_to_world->m = parent_local_to_world->m * local_to_parent->m;
 }
@@ -410,6 +410,14 @@ DEF_SYSTEM(rt_view_matrix_system) {
 
 DEF_SYSTEM(set_projection_system) {
     auto camera = (Camera*) components[0];
+
+    if (camera->window) {
+        Window* window = camera->window;
+        if (window->width != 0 && window->height != 0) {
+            camera->aspect = ((f32) window->width)/((f32) window->height);
+        }
+        camera->viewport = glm::vec4(0.0f, 0.0f, (f32) window->width, (f32) window->height);
+    }
 
     if (camera->is_orthographic) {
         if (camera->near == 0 && camera->far == 0) {

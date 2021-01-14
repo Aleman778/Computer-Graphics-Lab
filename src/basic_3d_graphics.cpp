@@ -21,8 +21,33 @@ struct Basic_3D_Graphics_Scene {
     bool is_initialized;
 };
 
+struct Movable_Cube_Controller {
+    Input* input;
+};
+
+REGISTER_COMPONENT(Movable_Cube_Controller);
+
+DEF_SYSTEM(movable_cube_controller_system) {
+    auto controller = (Movable_Cube_Controller*) components[0];
+    auto pos = (Position*) components[1];
+
+    float speed = 0.02f;
+    if (controller->input->shift_key.ended_down) {
+        speed = 0.08f;
+    }
+
+    if (pos) {
+        if (controller->input->a_key.ended_down) pos->v.x -= speed;
+        if (controller->input->d_key.ended_down) pos->v.x += speed;
+        if (controller->input->w_key.ended_down) pos->v.y += speed;
+        if (controller->input->s_key.ended_down) pos->v.y -= speed;
+        if (controller->input->c_key.ended_down) pos->v.z += speed;
+        if (controller->input->e_key.ended_down) pos->v.z -= speed;
+    }
+};
+
 static bool
-initialize_scene(Basic_3D_Graphics_Scene* scene) {
+initialize_scene(Basic_3D_Graphics_Scene* scene, Window* window) {
     scene->basic_shader = compile_basic_shader();
 
     Mesh_Builder mb = {};
@@ -58,6 +83,8 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     Entity_Handle movable_cube = spawn_entity(world);
     scene->movable_cube = movable_cube;
     add_component(world, movable_cube, Local_To_World);
+    auto controller = add_component(world, movable_cube, Movable_Cube_Controller);
+    controller->input = &window->input;
     auto pos = add_component(world, movable_cube, Position);
     pos->v = glm::vec3(0.0f, 0.0f, -1.0f);
 
@@ -74,12 +101,19 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
     camera_component->near = 0.01f;
     camera_component->far = 100000.0f;
     camera_component->is_orthographic = false;
+    camera_component->window = window;
     pos = add_component(world, camera, Position);
     pos->v = glm::vec3(0.0f);
     add_component(world, camera, Rotation);
     add_component(world, camera, Euler_Rotation);
 
     // Setup main systems
+    System cube_controller = {};
+    cube_controller.on_update = &movable_cube_controller_system;
+    use_component(cube_controller, Movable_Cube_Controller);
+    use_component(cube_controller, Position);
+    push_system(scene->main_systems, cube_controller);
+
     push_transform_systems(scene->main_systems);
     push_camera_systems(scene->main_systems);
 
@@ -95,45 +129,6 @@ initialize_scene(Basic_3D_Graphics_Scene* scene) {
 }
 
 void
-update_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
-    if (!scene->is_initialized) {
-        if (!initialize_scene(scene)) {
-            is_running = false;
-            return;
-        }
-    }
-
-    // Control the movable cuboid
-    float speed = 0.02f;
-    if (window->input.shift_key.ended_down) {
-        speed = 0.08f;
-    }
-
-    // TODO(alexander): this could be moved into a system and component
-    auto cube_pos = get_component(&scene->world, scene->movable_cube, Position);
-    if (cube_pos) {
-        if (window->input.a_key.ended_down) cube_pos->v.x -= speed;
-        if (window->input.d_key.ended_down) cube_pos->v.x += speed;
-        if (window->input.w_key.ended_down) cube_pos->v.y += speed;
-        if (window->input.s_key.ended_down) cube_pos->v.y -= speed;
-        if (window->input.c_key.ended_down) cube_pos->v.z += speed;
-        if (window->input.e_key.ended_down) cube_pos->v.z -= speed;
-    }
-
-    // Make the scene camera fit the entire window
-    auto camera = get_component(&scene->world, scene->camera, Camera);
-    if (camera) {
-        if (window->width != 0 && window->height != 0) {
-            camera->aspect = ((f32) window->width)/((f32) window->height);
-        }
-        camera->viewport = glm::vec4(0.0f, 0.0f, (f32) window->width, (f32) window->height);
-    }
-
-    // Update the world
-    update_systems(&scene->world, scene->main_systems, dt);
-}
-
-void
 render_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
     auto camera = get_component(&scene->world, scene->camera, Camera);
     begin_frame(primary_bg_color, camera->viewport, true, &scene->world.renderer);
@@ -141,7 +136,7 @@ render_scene(Basic_3D_Graphics_Scene* scene, Window* window, f32 dt) {
     end_frame();
 
     // ImGui
-    ImGui::Begin("Lab 3 - Basic 3D Graphics", &scene->show_gui, ImVec2(280, 150), ImGuiWindowFlags_NoSavedSettings);
+    ImGui::Begin("Lab 3 - Basic 3D Graphics", &scene->show_gui);
     ImGui::Text("Light:");
     ImGui::SliderFloat("Intensity", &scene->world.renderer.light_intensity, 0.0f, 1.0f);
     ImGui::SliderFloat("Attenuation", &scene->world.renderer.light_attenuation, 0.001f, 0.2f);

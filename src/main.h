@@ -32,7 +32,9 @@
 #include <GLFW/glfw3.h>
 
 #include <imgui.h>
-#include "imgui_impl_glfw_gl3.h"
+#include <imgui_guizmo.h>
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -77,6 +79,7 @@ enum Scene_Type {
     Scene_Triangulation,
     Scene_Basic_3D_Graphics,
     Scene_Simple_World,
+    Scene_World_Editor,
 };
 
 struct Button_State {
