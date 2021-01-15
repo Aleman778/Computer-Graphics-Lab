@@ -13,10 +13,9 @@ struct World_Editor {
 
     bool show_hierarchy;
     bool show_inspector;
-    
+
     bool is_initialized;
 };
-
 
 struct Editor_Camera_Controller {
     Input* input;
@@ -50,8 +49,8 @@ DEF_SYSTEM(editor_camera_controller_system) {
                 rot->v.y = -1.5f;
             }
 
-            if (rot->v.y > 1.2f) {
-                rot->v.y = 1.2f;
+            if (rot->v.y > 1.5f) {
+                rot->v.y = 1.5f;
             }
         }
     }
@@ -59,7 +58,7 @@ DEF_SYSTEM(editor_camera_controller_system) {
     // Translate
     f32 speed = controller->speed;
     glm::vec3 forward(cos(rot->v.x + pi + half_pi), cos(rot->v.y + half_pi), sin(rot->v.x + pi + half_pi));
-    glm::vec3 right(cos(rot->v.x + pi), 0.0f, sin(rot->v.x + pi));
+    glm::vec3 right(cos(rot->v.x + pi), cos(rot->v.y + half_pi - pi), sin(rot->v.x + pi));
     forward = glm::normalize(forward);
     right = glm::normalize(right);
     glm::vec3 up = glm::cross(forward, right);
@@ -75,7 +74,6 @@ DEF_SYSTEM(editor_camera_controller_system) {
     if (input->s_key.ended_down) pos->v -= forward * speed;
     if (input->d_key.ended_down) pos->v -= right * speed;
 }
-
 
 bool
 initialize_world_editor(World_Editor* editor, Window* window) {
@@ -99,7 +97,7 @@ initialize_world_editor(World_Editor* editor, Window* window) {
 
     editor->guizmo_operation = ImGuizmo::TRANSLATE;
     editor->guizmo_mode = ImGuizmo::WORLD;
-    
+
     // Setup main systems
     System controller = {};
     controller.on_update = &editor_camera_controller_system;
@@ -126,7 +124,7 @@ update_world_editor(World_Editor* editor, Window* window, f32 dt) {
             return;
         }
     }
-    
+
     update_systems(editor->world, editor->main_systems, dt);
 };
 
@@ -135,6 +133,8 @@ edit_transform(World_Editor* editor, World* world, Camera* camera, Entity* entit
     auto local_to_world = get_component(world, entity->handle, Local_To_World);
     auto local_to_parent = get_component(world, entity->handle, Local_To_Parent);
     if (!local_to_world) return;
+
+    ImGuizmo::BeginFrame();
 
     glm::mat4 world_matrix = local_to_world->m;
     glm::mat4 local_matrix = local_to_parent ? local_to_parent->m : local_to_world->m;
@@ -166,7 +166,7 @@ edit_transform(World_Editor* editor, World* world, Camera* camera, Entity* entit
     if (ImGui::RadioButton("Scale", editor->guizmo_operation == ImGuizmo::SCALE)) {
         editor->guizmo_operation = ImGuizmo::SCALE;
     }
-    
+
     if (editor->guizmo_operation != ImGuizmo::SCALE) {
         if (ImGui::RadioButton("Local", editor->guizmo_mode == ImGuizmo::LOCAL)) {
             editor->guizmo_mode = ImGuizmo::LOCAL;
@@ -175,6 +175,8 @@ edit_transform(World_Editor* editor, World* world, Camera* camera, Entity* entit
         if (ImGui::RadioButton("World", editor->guizmo_mode == ImGuizmo::WORLD)) {
             editor->guizmo_mode = ImGuizmo::WORLD;
         }
+    } else {
+        editor->guizmo_mode = ImGuizmo::LOCAL;
     }
 
     glm::vec3 position, rotation, scale;
@@ -186,21 +188,11 @@ edit_transform(World_Editor* editor, World* world, Camera* camera, Entity* entit
     glm::vec3 old_position = position;
     glm::vec3 old_rotation = rotation;
     glm::vec3 old_scale    = scale;
-    bool is_dirty = ImGui::InputFloat3("Position", glm::value_ptr(position), 3);
-    is_dirty     |= ImGui::InputFloat3("Rotation", glm::value_ptr(rotation), 3);
-    is_dirty     |= ImGui::InputFloat3("Scale",    glm::value_ptr(scale),    3);
+    bool is_dirty = false;
+    is_dirty |= ImGui::InputFloat3("Position", glm::value_ptr(position), 3);
+    is_dirty |= ImGui::InputFloat3("Rotation", glm::value_ptr(rotation), 3);
+    is_dirty |= ImGui::InputFloat3("Scale",    glm::value_ptr(scale),    3);
 
-    if (!is_dirty) {
-        matrix = world_matrix; // NOTE(alexander): gizmo always uses the world matrix
-        ImGuiIO& io = ImGui::GetIO();
-        ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
-        is_dirty = ImGuizmo::Manipulate(glm::value_ptr(camera->view),
-                                        glm::value_ptr(camera->proj),
-                                        editor->guizmo_operation,
-                                        editor->guizmo_mode,
-                                        glm::value_ptr(matrix));
-    }
-    
     if (is_dirty) {
         ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(position),
                                                 glm::value_ptr(rotation),
@@ -211,7 +203,7 @@ edit_transform(World_Editor* editor, World* world, Camera* camera, Entity* entit
             if (pos) pos->v = position;
             if (euler_rot) euler_rot->v = rotation;
             if (scl) scl->v = scale;
-        
+
             if (local_to_parent) {
                 local_to_parent->m = matrix;
             } else {
@@ -230,11 +222,11 @@ edit_transform(World_Editor* editor, World* world, Camera* camera, Entity* entit
                                                     glm::value_ptr(local_rotation),
                                                     glm::value_ptr(local_scale),
                                                     glm::value_ptr(local_matrix));
-            
+
             if (pos) pos->v = local_position;
             if (euler_rot) euler_rot->v = local_rotation;
             if (scl) scl->v = local_scale;
-        
+
             if (local_to_parent) {
                 local_to_parent->m = local_matrix;
             } else {
@@ -243,21 +235,71 @@ edit_transform(World_Editor* editor, World* world, Camera* camera, Entity* entit
         }
     }
 
+    matrix = world_matrix; // NOTE(alexander): guizmo only works in world space
+    glm::mat4 delta_matrix;
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+    is_dirty = ImGuizmo::Manipulate(glm::value_ptr(camera->view),
+                                    glm::value_ptr(camera->proj),
+                                    editor->guizmo_operation,
+                                    editor->guizmo_mode,
+                                    glm::value_ptr(matrix),
+                                    glm::value_ptr(delta_matrix));
+
+    if (is_dirty) {
+        if (local_to_parent) {
+            // NOTE(alexander): conversion from world space to local space.
+            glm::mat4 inv_parent_world;
+            auto parent = (Parent*) _get_component(world, entity, Parent_ID, Parent_SIZE);
+            if (parent) {
+                auto parent_local_to_world = get_component(world, parent->handle, Local_To_World);
+                if (parent_local_to_world) {
+                    inv_parent_world = glm::inverse(parent_local_to_world->m);
+                }
+            }
+            
+            // Changes the local or world matrix 
+            glm::mat4 new_local_matrix = inv_parent_world * matrix;
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(new_local_matrix),
+                                                  glm::value_ptr(position),
+                                                  glm::value_ptr(rotation),
+                                                  glm::value_ptr(scale));
+            
+            
+            if (pos) pos->v = position;
+            if (euler_rot) euler_rot->v = rotation;
+            if (scl) scl->v = scale;
+            local_to_parent->m = new_local_matrix;
+        } else {
+            // Changes always the world matrix 
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(matrix),
+                                                  glm::value_ptr(position),
+                                                  glm::value_ptr(rotation),
+                                                  glm::value_ptr(scale));
+
+            if (pos) pos->v = position;
+            if (euler_rot) euler_rot->v = rotation;
+            if (scl) scl->v = scale;
+            local_to_world->m = matrix;
+        }
+    }
 }
 
 void
 build_entity_hierarchy(World_Editor* editor, World* world, Entity* entity) {
     auto child = (Child*) _get_component(world, entity, Child_ID, Child_SIZE);
     auto debug_name = (Debug_Name*) _get_component(world, entity, Debug_Name_ID, Debug_Name_SIZE);
-    if (ImGui::TreeNodeEx((void*) entity->handle.id,
-                          child ? ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
-                          : ImGuiTreeNodeFlags_Leaf,
-                          "%s", debug_name ? debug_name->s.c_str() : default_entity_name)) {
-        if (ImGui::IsItemClicked() &&
-            (ImGui::GetMousePos().x - ImGui::GetItemRectMin().x) > ImGui::GetTreeNodeToLabelSpacing()) {
-            editor->selected = entity->handle;
-        }
-        
+    auto entity_name = debug_name ? debug_name->s.c_str() : default_entity_name;
+    auto node_flags = child ? ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
+        : ImGuiTreeNodeFlags_Leaf;
+    
+    bool is_open = ImGui::TreeNodeEx((void*) entity->handle.id, node_flags, entity_name);
+    if (ImGui::IsItemClicked() &&
+        (ImGui::GetMousePos().x - ImGui::GetItemRectMin().x) > ImGui::GetTreeNodeToLabelSpacing()) {
+        editor->selected = entity->handle;
+    }
+
+    if (is_open) {
         for (auto component : entity->components) {
             if (component.id == Child_ID) {
                 std::vector<u8>& memory = world->components[Child_ID];
@@ -273,7 +315,7 @@ build_entity_hierarchy(World_Editor* editor, World* world, Entity* entity) {
 void
 render_world_editor(World_Editor* editor, Window* window, f32 dt) {
     World* world = editor->world;
-    
+
     // Render the world
     auto camera = get_component(world, editor->editor_camera, Camera);
     begin_frame(world->renderer.fog_color, camera->viewport, true, &world->renderer);

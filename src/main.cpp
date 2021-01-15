@@ -387,7 +387,6 @@ main() {
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
-            ImGuizmo::BeginFrame();
 
             // Render current scene
             switch (current_scene_type) {
