@@ -1,5 +1,5 @@
-# Labs in Real-time Graphics and Computational Geometry
-My laboratory work in course D7045E Real-time graphics and computational geometry.
+# Lab work Computer Graphics and Geometry
+Lab work in course Computer Graphics and Geometry
 
 ## Lab 4
 Lab 4 is about creating a simple world and representing it in a scene graph. I went for a slightly different approach and instead implemented a data oriented entity-component-system (ECS). But it can be used as a scene graph by adding parent child components and updating their transforms according to the hierarchy. For the world I wanted to design a snowy scene and this is the final scene:
